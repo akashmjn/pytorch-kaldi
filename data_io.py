@@ -11,12 +11,18 @@ import sys
 from scipy.ndimage.interpolation import shift
 import time
 
-def load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_length):
-
-    fea= { k:m for k,m in kaldi_io.read_mat_ark('ark:copy-feats scp:'+fea_scp+' ark:- |'+fea_opts) }
+def load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_length,fea_vec):
+    if fea_vec:
+        fea= { k:m for k,m in kaldi_io.read_vec_flt_ark('ark:copy-vector scp:'+fea_scp+' ark:- |'+fea_opts) }
+    else:
+        fea= { k:m for k,m in kaldi_io.read_mat_ark('ark:copy-feats scp:'+fea_scp+' ark:- |'+fea_opts) }
 
     lab= { k:v for k,v in kaldi_io.read_vec_int_ark('gunzip -c '+lab_folder+'/ali*.gz | '+lab_opts+' '+lab_folder+'/final.mdl ark:- ark:-|')  if k in fea} # Note that I'm copying only the aligments of the loaded fea
-    fea={k: v for k, v in fea.items() if k in lab} # This way I remove all the features without an aligment (see log file in alidir "Did not Succeded")
+
+    if fea_vec:
+        fea={k: np.tile(v,[lab[k].shape[0],1]) for k, v in fea.items() if k in lab} # tile vector for all frames if alignment exists 
+    else:
+        fea={k: v for k, v in fea.items() if k in lab} # This way I remove all the features without an aligment (see log file in alidir "Did not Succeded")
 
     end_snt=0
     end_index=[]
@@ -104,10 +110,10 @@ def context_window(fea,left,right):
     return fea_conc
 
 
-def load_chunk(fea_scp,fea_opts,lab_folder,lab_opts,left,right,max_sequence_length):
+def load_chunk(fea_scp,fea_opts,lab_folder,lab_opts,left,right,max_sequence_length,fea_vec=False):
   
   # open the file
-  [data_name,data_set,data_lab,end_index]=load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_length)
+  [data_name,data_set,data_lab,end_index]=load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_length,fea_vec)
 
   # Context window
   if left!=0 or right!=0:
@@ -151,6 +157,7 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
         fea_opts=fea_dict[fea][2]
         cw_left=int(fea_dict[fea][3])
         cw_right=int(fea_dict[fea][4])
+        fea_vec='vec' in fea
         
         cnt_lab=0
         for lab in lab_dict.keys():
@@ -158,7 +165,7 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
             lab_folder=lab_dict[lab][1]
             lab_opts=lab_dict[lab][2]
     
-            [data_name_fea,data_set_fea,data_end_index_fea]=load_chunk(fea_scp,fea_opts,lab_folder,lab_opts,cw_left,cw_right,max_seq_length)
+            [data_name_fea,data_set_fea,data_end_index_fea]=load_chunk(fea_scp,fea_opts,lab_folder,lab_opts,cw_left,cw_right,max_seq_length,fea_vec)
     
             
             # making the same dimenion for all the features (compensating for different context windows)

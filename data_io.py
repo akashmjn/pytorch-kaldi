@@ -10,10 +10,12 @@ import numpy as np
 import sys
 from scipy.ndimage.interpolation import shift
 import time
+import pdb
 
 def load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_length):
 
     fea= { k:m for k,m in kaldi_io.read_mat_ark('ark:copy-feats scp:'+fea_scp+' ark:- |'+fea_opts) }
+    pdb.set_trace()
 
     lab= { k:v for k,v in kaldi_io.read_vec_int_ark('gunzip -c '+lab_folder+'/ali*.gz | '+lab_opts+' '+lab_folder+'/final.mdl ark:- ark:-|')  if k in fea} # Note that I'm copying only the aligments of the loaded fea
     fea={k: v for k, v in fea.items() if k in lab} # This way I remove all the features without an aligment (see log file in alidir "Did not Succeded")
@@ -157,7 +159,8 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
             
             lab_folder=lab_dict[lab][1]
             lab_opts=lab_dict[lab][2]
-    
+   
+            pdb.set_trace() 
             [data_name_fea,data_set_fea,data_end_index_fea]=load_chunk(fea_scp,fea_opts,lab_folder,lab_opts,cw_left,cw_right,max_seq_length)
     
             
@@ -215,6 +218,7 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
         cnt_lab=cnt_lab+1
            
     data_set=np.column_stack((data_set,labs))
+    pdb.set_trace()
 
     
     return [data_name,data_set,data_end_index]

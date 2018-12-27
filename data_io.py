@@ -158,7 +158,6 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
         cw_left=int(fea_dict[fea][3])
         cw_right=int(fea_dict[fea][4])
         fea_vec='vec' in fea
-        if fea_vec: continue
         
         cnt_lab=0
         for lab in lab_dict.keys():

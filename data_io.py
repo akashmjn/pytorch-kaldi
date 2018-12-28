@@ -123,7 +123,9 @@ def load_chunk(fea_scp,fea_opts,lab_folder,lab_opts,left,right,max_sequence_leng
   end_index[-1]=end_index[-1]-right
 
   # mean and variance normalization
-  data_set=(data_set-np.mean(data_set,axis=0))/np.std(data_set,axis=0)
+  data_set_means, data_set_std = np.mean(data_set,axis=0), np.std(data_set,axis=0)
+  data_set -= data_set_means # inplace operations for memory efficiency
+  data_set /= data_set_std
 
   # Label processing
   data_lab=data_lab-data_lab.min()
@@ -167,15 +169,13 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
    
             [data_name_fea,data_set_fea,data_end_index_fea]=load_chunk(fea_scp,fea_opts,lab_folder,lab_opts,cw_left,cw_right,max_seq_length,fea_vec)
     
-            
-            # making the same dimenion for all the features (compensating for different context windows)
-            labs_fea=data_set_fea[cw_left_max-cw_left:data_set_fea.shape[0]-(cw_right_max-cw_right),-1]
-            data_set_fea=data_set_fea[cw_left_max-cw_left:data_set_fea.shape[0]-(cw_right_max-cw_right),0:-1]
-            data_end_index_fea=data_end_index_fea-(cw_left_max-cw_left)
-            data_end_index_fea[-1]=data_end_index_fea[-1]-(cw_right_max-cw_right)
+            if cw_left!=0 or cw_right!=0: 
+                # making the same dimenion for all the features (compensating for different context windows)
+                labs_fea=data_set_fea[cw_left_max-cw_left:data_set_fea.shape[0]-(cw_right_max-cw_right),-1]
+                data_set_fea=data_set_fea[cw_left_max-cw_left:data_set_fea.shape[0]-(cw_right_max-cw_right),0:-1]
+                data_end_index_fea=data_end_index_fea-(cw_left_max-cw_left)
+                data_end_index_fea[-1]=data_end_index_fea[-1]-(cw_right_max-cw_right)
     
-            
-            
             if cnt_fea==0 and cnt_lab==0:
                 data_set=data_set_fea
                 labs=labs_fea

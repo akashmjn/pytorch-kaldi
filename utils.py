@@ -22,6 +22,7 @@ import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
 
+import os
 
 def run_command(cmd):
     """from http://blog.kagesenshi.org/2008/02/teeing-python-subprocesspopen-output.html
@@ -37,7 +38,9 @@ def run_command(cmd):
     return ''.join(stdout)
 
 def run_shell_display(cmd):
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,shell=True)
+    # p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,shell=True)
+    os.system(cmd)
+    return
     while True:
         out = p.stdout.read(1).decode('utf-8')
         if out == '' and p.poll() != None:

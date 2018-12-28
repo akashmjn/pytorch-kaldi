@@ -11,6 +11,8 @@ import sys
 from scipy.ndimage.interpolation import shift
 import time
 
+import pdb
+
 def load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_length,fea_vec):
     if fea_vec:
         fea= { k:m for k,m in kaldi_io.read_vec_flt_ark('ark:copy-vector scp:'+fea_scp+' ark:- |'+fea_opts) }
@@ -162,10 +164,12 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
         fea_vec='vec' in fea
         
         cnt_lab=0
+        pdb.set_trace()
         for lab in lab_dict.keys():
             
             lab_folder=lab_dict[lab][1]
             lab_opts=lab_dict[lab][2]
+            pdb.set_trace()
    
             [data_name_fea,data_set_fea,data_end_index_fea]=load_chunk(fea_scp,fea_opts,lab_folder,lab_opts,cw_left,cw_right,max_seq_length,fea_vec)
     
@@ -177,6 +181,7 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
                 data_end_index_fea[-1]=data_end_index_fea[-1]-(cw_right_max-cw_right)
             else:
                 labs_fea = data_set_fea[:,-1] # avoid memory intensive operations on data_set
+                data_set_fea = data_set_fea[:,0:-1]
     
             if cnt_fea==0 and cnt_lab==0:
                 data_set=data_set_fea
@@ -196,7 +201,7 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
                     labs=np.column_stack((labs,labs_fea))
                 
                 if cnt_lab==0:
-                    data_set=np.column_stack((data_set,data_set_fea))
+                    data_set=np.column_stack((data_set,data_set_fea)) # memory intensive step 
                     fea_dict[fea].append(fea_index)
                     fea_index=fea_index+data_set_fea.shape[1]
                     fea_dict[fea].append(fea_index)

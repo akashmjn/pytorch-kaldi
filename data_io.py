@@ -168,14 +168,14 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
     # TODO: leave some buffer in data_set matrix (for now ck_nframes is exact)
     # TODO: this works for single label, no cw case, untested for others 
  
-    fea_index=0
+    fea_index, data_name, data_end_index = 0, None, None
     for cnt_fea, fea in enumerate(fea_dict.keys()):
         
         # reading the features
         fea_scp, fea_opts = fea_dict[fea][1], fea_dict[fea][2]
         cw_left, cw_right = int(fea_dict[fea][3]), int(fea_dict[fea][4])
         fea_vec='vec' in fea
-        fea_dim=fea_dict[fea][-1]
+        fea_dim=int(fea_dict[fea][-1])
         
         pdb.set_trace()
         for cnt_lab, lab in enumerate(lab_dict.keys()):
@@ -193,12 +193,12 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
             labs[:,cnt_lab] = data_set[:,fea_index+fea_dim]
 
             # Checks if lab_names are the same for all the features
-            if data_name and not(data_name==data_name_fea):
+            if data_name is not None and not(data_name==data_name_fea):
                 sys.stderr.write('ERROR: different sentence ids are detected for the different features. Plase check again input feature lists"\n')
                 sys.exit(0)
             
             # Checks if end indexes are the same for all the features
-            if data_end_index and not(data_end_index==data_end_index_fea).all():
+            if data_end_index is not None and not(data_end_index==data_end_index_fea).all():
                 sys.stderr.write('ERROR end_index must be the same for all the sentences"\n')
                 sys.exit(0)
             

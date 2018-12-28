@@ -207,49 +207,48 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
         # update the offset values
         fea_index += fea_dim
 
-            # TODO: figure out the cw related manipulations later
-            """
-            if cw_left!=0 or cw_right!=0: 
-                # making the same dimenion for all the features (compensating for different context windows)
-                labs_fea=data_set_fea[cw_left_max-cw_left:data_set_fea.shape[0]-(cw_right_max-cw_right),-1]
-                data_set_fea=data_set_fea[cw_left_max-cw_left:data_set_fea.shape[0]-(cw_right_max-cw_right),0:-1]
-                data_end_index_fea=data_end_index_fea-(cw_left_max-cw_left)
-                data_end_index_fea[-1]=data_end_index_fea[-1]-(cw_right_max-cw_right)
-            else:
-                labs_fea = data_set_fea[:,-1] # avoid memory intensive operations on data_set
-                data_set_fea = data_set_fea[:,0:-1]
-    
-            if cnt_fea==0 and cnt_lab==0:
-                data_set=data_set_fea
-                labs=labs_fea
-                data_end_index=data_end_index_fea
-                data_end_index=data_end_index_fea
-                data_name=data_name_fea
-                
+    return [data_name,data_set,data_end_index]
+# TODO: figure out the cw related manipulations later
+"""
+        if cw_left!=0 or cw_right!=0: 
+            # making the same dimenion for all the features (compensating for different context windows)
+            labs_fea=data_set_fea[cw_left_max-cw_left:data_set_fea.shape[0]-(cw_right_max-cw_right),-1]
+            data_set_fea=data_set_fea[cw_left_max-cw_left:data_set_fea.shape[0]-(cw_right_max-cw_right),0:-1]
+            data_end_index_fea=data_end_index_fea-(cw_left_max-cw_left)
+            data_end_index_fea[-1]=data_end_index_fea[-1]-(cw_right_max-cw_right)
+        else:
+            labs_fea = data_set_fea[:,-1] # avoid memory intensive operations on data_set
+            data_set_fea = data_set_fea[:,0:-1]
+
+        if cnt_fea==0 and cnt_lab==0:
+            data_set=data_set_fea
+            labs=labs_fea
+            data_end_index=data_end_index_fea
+            data_end_index=data_end_index_fea
+            data_name=data_name_fea
+            
+            fea_dict[fea].append(fea_index)
+            fea_index=fea_index+data_set_fea.shape[1]
+            fea_dict[fea].append(fea_index)
+            fea_dict[fea].append(fea_dict[fea][6]-fea_dict[fea][5])
+            
+        else:
+            if cnt_fea==0:
+                labs=np.column_stack((labs,labs_fea))
+            
+            if cnt_lab==0:
+                data_set=np.column_stack((data_set,data_set_fea)) # memory intensive step 
                 fea_dict[fea].append(fea_index)
                 fea_index=fea_index+data_set_fea.shape[1]
                 fea_dict[fea].append(fea_index)
                 fea_dict[fea].append(fea_dict[fea][6]-fea_dict[fea][5])
-                
-            else:
-                if cnt_fea==0:
-                    labs=np.column_stack((labs,labs_fea))
-                
-                if cnt_lab==0:
-                    data_set=np.column_stack((data_set,data_set_fea)) # memory intensive step 
-                    fea_dict[fea].append(fea_index)
-                    fea_index=fea_index+data_set_fea.shape[1]
-                    fea_dict[fea].append(fea_index)
-                    fea_dict[fea].append(fea_dict[fea][6]-fea_dict[fea][5])
-        
-    cnt_lab=0    
-    for lab in lab_dict.keys():
-        lab_dict[lab].append(data_set.shape[1]+cnt_lab)
-        cnt_lab=cnt_lab+1
-           
-    data_set=np.column_stack((data_set,labs))
-            """
     
-    return [data_name,data_set,data_end_index]
+cnt_lab=0    
+for lab in lab_dict.keys():
+    lab_dict[lab].append(data_set.shape[1]+cnt_lab)
+    cnt_lab=cnt_lab+1
+        
+data_set=np.column_stack((data_set,labs))
+"""
 
 

@@ -208,9 +208,10 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
             data_name, data_end_index = data_name_fea, data_end_index_fea
     
         # update the offset values
-        fea_dict[fea].insert(-1,fea_index) # used by downstream model_init
+        fea_dict[fea].append(fea_index) # used by downstream model_init
         fea_index += fea_dim
-        fea_dict[fea].insert(-1,fea_index)
+        fea_dict[fea].append(fea_index)
+        fea_dict[fea].append(fea_dim)
 
     return [data_name,data_set,data_end_index]
 # TODO: figure out the cw related manipulations later

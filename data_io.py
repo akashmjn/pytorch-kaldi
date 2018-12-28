@@ -161,7 +161,7 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
                 ) if k in ck_utt_ids ] # list of num frames for utterance in current chunk     
     # pre-allocate an np array to avoid memory wastage with concatentation
     ck_nframes, ck_nlabs = sum(ck_lab_nframes), len(lab_dict) 
-    ck_fea_dim = sum([ v[-1] for v in fea_dict.values()] )
+    ck_fea_dim = sum([ int(v[-1]) for v in fea_dict.values()] )
     data_set = np.empty((ck_nframes,ck_fea_dim+ck_nlabs))
     labs = data_set[:,-ck_nlabs:]
 

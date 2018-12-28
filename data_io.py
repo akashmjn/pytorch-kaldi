@@ -157,7 +157,7 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
     with open(fea_scp) as f:
         ck_utt_ids = set([ s.split()[0] for s in f.readlines() ])
     ck_lab_nframes = [ v.shape[0] for k,v in kaldi_io.read_vec_int_ark(
-            "gunzip -c {}/ali*.gz | {} {}/final.mdl ark:- ark:-|"
+            "gunzip -c {0}/ali*.gz | {1} {0}/final.mdl ark:- ark:-|".format(lab_folder,lab_opts)
                 ) if k in ck_utt_ids ] # list of num frames for utterance in current chunk     
     # pre-allocate an np array to avoid memory wastage with concatentation
     ck_nframes, ck_nlabs = sum(ck_lab_nframes), len(lab_dict) 

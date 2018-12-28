@@ -31,6 +31,8 @@ def load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_l
     snt_name=[]
     fea_conc=[]
     lab_conc=[]
+
+    # TODO: Fix memory inefficiency in using lists + concatentation here
     
     tmp=0
     for k in sorted(sorted(fea.keys()), key=lambda k: len(fea[k])):
@@ -191,6 +193,7 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
 
             # move labels into end column - offset
             labs[:,cnt_lab] = data_set[:,fea_index+fea_dim]
+            lab_dict[lab].append(ck_fea_dim+cnt_lab)
 
             # Checks if lab_names are the same for all the features
             if data_name is not None and not(data_name==data_name_fea):
@@ -205,7 +208,9 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
             data_name, data_end_index = data_name_fea, data_end_index_fea
     
         # update the offset values
+        fea_dict[fea].insert(-1,fea_index) # used by downstream model_init
         fea_index += fea_dim
+        fea_dict[fea].insert(-1,fea_index)
 
     return [data_name,data_set,data_end_index]
 # TODO: figure out the cw related manipulations later

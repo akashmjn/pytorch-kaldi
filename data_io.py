@@ -185,7 +185,7 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
    
             # copy features into corresponding cols of data_set matrix
             [ data_name_fea,
-              data_set[:,fea_index:],
+              data_set[:,fea_index:fea_index+fea_dim+1],
               data_end_index_fea ]=load_chunk(fea_scp,fea_opts,lab_folder,
                                     lab_opts,cw_left,cw_right,max_seq_length,fea_vec)
 

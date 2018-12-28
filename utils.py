@@ -1311,7 +1311,7 @@ def dict_fea_lab_arch(config):
         [out_name,operation,inp1,inp2]=list(re.findall(pattern,line)[0])
         
         if inp1 in fea_lst and inp1 not in fea_lst_used_name :
-            pattern_fea="fea_name="+inp1+"\nfea_lst=(.*)\nfea_opts=(.*)\ncw_left=(.*)\ncw_right=(.*)"
+            pattern_fea="fea_name="+inp1+"\nfea_lst=(.*)\nfea_opts=(.*)\ncw_left=(.*)\ncw_right=(.*)\nfea_dim=(.*)"
             if sys.version_info[0]==2:
                 fea_lst_used.append((inp1+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).encode('utf8').split(','))
                 fea_dict_used[inp1]=(inp1+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).encode('utf8').split(',')
@@ -1323,7 +1323,7 @@ def dict_fea_lab_arch(config):
             
             
         if inp2 in fea_lst and inp2 not in fea_lst_used_name:
-            pattern_fea="fea_name="+inp2+"\nfea_lst=(.*)\nfea_opts=(.*)\ncw_left=(.*)\ncw_right=(.*)"
+            pattern_fea="fea_name="+inp2+"\nfea_lst=(.*)\nfea_opts=(.*)\ncw_left=(.*)\ncw_right=(.*)\nfea_dim=(.*)"
             if sys.version_info[0]==2:
                 fea_lst_used.append((inp2+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).encode('utf8').split(','))
                 fea_dict_used[inp2]=(inp2+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).encode('utf8').split(',')

@@ -175,6 +175,8 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
                 data_set_fea=data_set_fea[cw_left_max-cw_left:data_set_fea.shape[0]-(cw_right_max-cw_right),0:-1]
                 data_end_index_fea=data_end_index_fea-(cw_left_max-cw_left)
                 data_end_index_fea[-1]=data_end_index_fea[-1]-(cw_right_max-cw_right)
+            else:
+                labs_fea = data_set_fea[:,-1] # avoid memory intensive operations on data_set
     
             if cnt_fea==0 and cnt_lab==0:
                 data_set=data_set_fea

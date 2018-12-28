@@ -177,7 +177,7 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
         fea_scp, fea_opts = fea_dict[fea][1], fea_dict[fea][2]
         cw_left, cw_right = int(fea_dict[fea][3]), int(fea_dict[fea][4])
         fea_vec='vec' in fea
-        fea_dim=int(fea_dict[fea][-1])
+        fea_dim=int(fea_dict[fea].pop()) # hacked in fea_dim. bad practice to modify arg like this
         
         pdb.set_trace()
         for cnt_lab, lab in enumerate(lab_dict.keys()):
@@ -207,11 +207,9 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
             
             data_name, data_end_index = data_name_fea, data_end_index_fea
     
-        # update the offset values
-        fea_dict[fea].append(fea_index) # used by downstream model_init
+        # update the offset values and fea_dict (used downstream by model_init)
+        fea_dict[fea].extend([fea_index,fea_index+fea_dim,fea_dim])
         fea_index += fea_dim
-        fea_dict[fea].append(fea_index)
-        fea_dict[fea].append(fea_dim)
 
     return [data_name,data_set,data_end_index]
 # TODO: figure out the cw related manipulations later

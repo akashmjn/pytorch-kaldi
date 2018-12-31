@@ -11,7 +11,6 @@ import sys
 from scipy.ndimage.interpolation import shift
 import time
 
-import pdb
 
 def load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_length,fea_vec):
     if fea_vec:
@@ -179,11 +178,9 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
         fea_vec='vec' in fea
         fea_dim=int(fea_dict[fea].pop()) # hacked in fea_dim. bad practice to modify arg like this
         
-        pdb.set_trace()
         for cnt_lab, lab in enumerate(lab_dict.keys()):
             
             lab_folder, lab_opts = lab_dict[lab][1], lab_dict[lab][2]
-            pdb.set_trace()
    
             # copy features into corresponding cols of data_set matrix
             [ data_name_fea,

@@ -22,6 +22,7 @@ import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
 
+import os
 
 def run_command(cmd):
     """from http://blog.kagesenshi.org/2008/02/teeing-python-subprocesspopen-output.html
@@ -37,7 +38,9 @@ def run_command(cmd):
     return ''.join(stdout)
 
 def run_shell_display(cmd):
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,shell=True)
+    # p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,shell=True)
+    os.system(cmd)
+    return
     while True:
         out = p.stdout.read(1).decode('utf-8')
         if out == '' and p.poll() != None:
@@ -1308,7 +1311,7 @@ def dict_fea_lab_arch(config):
         [out_name,operation,inp1,inp2]=list(re.findall(pattern,line)[0])
         
         if inp1 in fea_lst and inp1 not in fea_lst_used_name :
-            pattern_fea="fea_name="+inp1+"\nfea_lst=(.*)\nfea_opts=(.*)\ncw_left=(.*)\ncw_right=(.*)"
+            pattern_fea="fea_name="+inp1+"\nfea_lst=(.*)\nfea_opts=(.*)\ncw_left=(.*)\ncw_right=(.*)\nfea_dim=(.*)"
             if sys.version_info[0]==2:
                 fea_lst_used.append((inp1+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).encode('utf8').split(','))
                 fea_dict_used[inp1]=(inp1+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).encode('utf8').split(',')
@@ -1320,7 +1323,7 @@ def dict_fea_lab_arch(config):
             
             
         if inp2 in fea_lst and inp2 not in fea_lst_used_name:
-            pattern_fea="fea_name="+inp2+"\nfea_lst=(.*)\nfea_opts=(.*)\ncw_left=(.*)\ncw_right=(.*)"
+            pattern_fea="fea_name="+inp2+"\nfea_lst=(.*)\nfea_opts=(.*)\ncw_left=(.*)\ncw_right=(.*)\nfea_dim=(.*)"
             if sys.version_info[0]==2:
                 fea_lst_used.append((inp2+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).encode('utf8').split(','))
                 fea_dict_used[inp2]=(inp2+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).encode('utf8').split(',')

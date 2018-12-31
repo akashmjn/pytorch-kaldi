@@ -156,10 +156,10 @@ for ep in range(N_ep):
                 pt_files[pt_arch]=out_folder+'/exp_files/train_'+tr_data+'_ep'+format(ep, "03d")+'_ck'+format(ck, "02d")+'_'+pt_arch+'.pkl'
                 
             # remove previous pkl files
-            if len(model_files_past.keys())>0:
-                for pt_arch in pt_files.keys():
-                    if os.path.exists(model_files_past[pt_arch]):
-                        os.remove(model_files_past[pt_arch]) 
+            # if len(model_files_past.keys())>0:
+            #     for pt_arch in pt_files.keys():
+            #         if os.path.exists(model_files_past[pt_arch]):
+            #             os.remove(model_files_past[pt_arch]) 
     
     
         # Training Loss and Error    

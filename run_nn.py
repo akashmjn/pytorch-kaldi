@@ -218,13 +218,15 @@ for i in range(N_batches):
         outs_dict['loss_final'].backward()
         
         # Gradient Clipping (th 0.5)
-        grad_max_norm = 0.0
+        grad_max_norm, grad_med_norm, grad_clip_norm = 0.0, np.inf, 0.1
         for net in nns.keys():
-            grad_max_norm = max(torch.max(torch.stack(
+            grad_norms = torch.stack(
                         [torch.norm(p.grad) for p in nns[net].parameters()]
-                    )).item(),grad_max_norm)
-            torch.nn.utils.clip_grad_norm_(nns[net].parameters(), 0.1)
-        grad_max_norm = round(grad_max_norm,3)
+                      )
+            grad_max_norm = max(torch.max(grad_norms).item(),grad_max_norm)
+            grad_med_norm = min(torch.median(grad_norms).item(),grad_med_norm)
+            torch.nn.utils.clip_grad_norm_(nns[net].parameters(), grad_clip_norm)
+        grad_max_norm, grad_med_norm = round(grad_max_norm,3), round(grad_med_norm,4)
 
         for opt in optimizers.keys():
             if not(strtobool(config[arch_dict[opt][0]]['arch_freeze'])):
@@ -255,7 +257,8 @@ for i in range(N_batches):
     
     # Progress bar
     if to_do == 'train':
-        status_string="Training |L:{}, Err:{}, G:{}| (Batch {}/{})".format(batch_loss,batch_err,grad_max_norm,i+1,N_batches)
+        status_string="Training |L:{}, Err:{}, Gmax/med:{}/{}| (Batch {}/{})".format(batch_loss,batch_err,
+                                                        grad_max_norm,grad_med_norm,i+1,N_batches)
     if to_do == 'valid':
       status_string="Validating |L:{}, Err:{}| (Batch {}/{})".format(batch_loss,batch_err,i+1,N_batches)
     if to_do == 'forward':

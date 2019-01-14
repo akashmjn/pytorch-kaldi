@@ -153,8 +153,8 @@ def load_counts(class_counts_file):
 def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
     
     # Estimate total number of frames in this chunk by relatively quickly reading alignments
-    fea_scp = fea_dict.values()[0][1]
-    lab_folder, lab_opts = lab_dict.values()[0][1:3]
+    fea_scp = list(fea_dict.values())[0][1]
+    lab_folder, lab_opts = list(lab_dict.values())[0][1:3]
     with open(fea_scp) as f:
         ck_utt_ids = set([ s.split()[0] for s in f.readlines() ])
     ck_lab_nframes = [ v.shape[0] for k,v in kaldi_io.read_vec_int_ark(
@@ -162,7 +162,7 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
                 ) if k in ck_utt_ids ] # list of num frames for utterance in current chunk     
     # pre-allocate an np array to avoid memory wastage with concatentation
     ck_nframes, ck_nlabs = sum(ck_lab_nframes), len(lab_dict) 
-    ck_fea_dim = sum([ int(v[-1]) for v in fea_dict.values()] )
+    ck_fea_dim = sum([ int(v[-1]) for v in list(fea_dict.values())] )
     data_set = np.empty((ck_nframes,ck_fea_dim+ck_nlabs))
     labs = data_set[:,-ck_nlabs:]
 

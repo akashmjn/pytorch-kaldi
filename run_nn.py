@@ -18,7 +18,6 @@ import time
 from scipy.ndimage.interpolation import shift
 import kaldi_io
 
-import pdb
 
 
 # Reading chunk-specific cfg file (first argument-mandatory file) 
@@ -221,7 +220,7 @@ for i in range(N_batches):
         grad_max_norm, grad_med_norm, grad_clip_norm = 0.0, np.inf, 0.1
         for net in nns.keys():
             grad_norms = torch.stack(
-                        [torch.norm(p.grad) for p in nns[net].parameters()]
+                        [p.grad.data.norm(2) for p in nns[net].parameters() if p.grad is not None]
                       )
             grad_max_norm = max(torch.max(grad_norms).item(),grad_max_norm)
             grad_med_norm = min(torch.median(grad_norms).item(),grad_med_norm)

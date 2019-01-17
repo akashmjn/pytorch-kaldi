@@ -12,7 +12,7 @@ else:
     glob_string = "./*/*.scp"
 
 ## Print info message 
-print("\n ## Info: Only run the script inside the terminal egs directory, such as kaldi/egs/ami/s5b ##\n")
+print("\n ## Info: Only run in terminal egs directory, such as kaldi/egs/ami/s5b. Pass \"glob_string\" inside quotes ##\n")
 
 ## ASSUMES all paths are absolute paths
 assert (curr_eg_path[0]=='/') and (new_eg_path[0]=='/'), "Please only use absolute paths!"

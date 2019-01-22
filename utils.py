@@ -23,6 +23,7 @@ mpl.use('Agg')
 import matplotlib.pyplot as plt
 
 
+
 def run_command(cmd):
     """from http://blog.kagesenshi.org/2008/02/teeing-python-subprocesspopen-output.html
     """
@@ -67,23 +68,64 @@ def read_args_command_line(args,config):
     values=[]
 
     for i in range(2,len(args)):
-        # check if the option is valid
-        r=re.compile('--.*,.*=.*')
-        if r.match(args[i]) is None:
+
+        # check if the option is valid for second level
+        r2=re.compile('--.*,.*=.*')
+
+        # check if the option is valid for 4 level
+        r4=re.compile('--.*,.*,.*,.*=".*"')
+        if r2.match(args[i]) is None and r4.match(args[i]) is None:
             sys.stderr.write('ERROR: option \"%s\" from command line is not valid! (the format must be \"--section,field=value\")\n' %(args[i]))
             sys.exit(0)
         
         sections.append(re.search('--(.*),', args[i]).group(1))
-        fields.append(re.search(',(.*)=', args[i]).group(1))
+        fields.append(re.search(',(.*)', args[i].split('=')[0]).group(1))
         values.append(re.search('=(.*)', args[i]).group(1))
-    
+
     # parsing command line arguments
     for i in range(len(sections)):
+
+        # Remove multi level is level >= 2
+        sections[i] = sections[i].split(',')[0]
+
         if sections[i] in config.sections():
-            if fields[i] in list(config[sections[i]]):
-                config[sections[i]][fields[i]]=values[i]
+
+            # Case of args level > than 2 like --sec,fields,0,field="value"
+            if len(fields[i].split(',')) >= 2:
+
+                splitted = fields[i].split(',')
+
+                #Get the actual fields
+                field  = splitted[0]
+                number = int(splitted[1])
+                f_name = splitted[2]
+                if field in list(config[sections[i]]):
+
+                    # Get the current string of the corresponding field
+                    current_config_field = config[sections[i]][field]
+
+                    # Count the number of occurence of the required field
+                    matching = re.findall(f_name+'.', current_config_field)
+                    if number >= len(matching):
+                        sys.stderr.write('ERROR: the field number \"%s\" provided from command line is not valid, we found \"%s\" \"%s\" field(s) in section \"%s\"!\n' %(number, len(matching), f_name, field ))
+                        sys.exit(0)
+                    else:
+                        
+                        # Now replace
+                        str_to_be_replaced         = re.findall(f_name+'.*', current_config_field)[number]
+                        new_str                    = str(f_name+'='+values[i])
+                        replaced                   = nth_replace_string(current_config_field, str_to_be_replaced, new_str, number+1)
+                        config[sections[i]][field] = replaced
+
+                else:
+                    sys.stderr.write('ERROR: field \"%s\" of section \"%s\" from command line is not valid!")\n' %(field,sections[i]))
+                    sys.exit(0)
             else:
-                sys.stderr.write('ERROR: field \"%s\" of section \"%s\" from command line is not valid!")\n' %(fields[i],sections[i]))  
+                if fields[i] in list(config[sections[i]]):
+                    config[sections[i]][fields[i]]=values[i]
+                else:
+                    sys.stderr.write('ERROR: field \"%s\" of section \"%s\" from command line is not valid!")\n' %(fields[i],sections[i])) 
+                    sys.exit(0)
         else:
             sys.stderr.write('ERROR: section \"%s\" from command line is not valid!")\n' %(sections[i]))
             sys.exit(0)
@@ -364,7 +406,8 @@ def check_cfg_fields(config_proto,config,cfg_file):
             sec_parse=False
     
     if sec_parse==False:
-        sys.stderr.write("ERROR: Revise the confg file %s \n" % (cfg_file))    
+        sys.stderr.write("ERROR: Revise the confg file %s \n" % (cfg_file))
+        sys.exit(0)
     return sec_parse
 
 
@@ -416,7 +459,12 @@ def check_cfg(cfg_file,config,cfg_file_proto):
     # Check consistency between cfg_file and cfg_file_proto    
     [config_proto,name_data,name_arch]=check_consistency_with_proto(cfg_file,cfg_file_proto)
 
-
+    # Reload data_name because they might be altered by arguments
+    name_data=[]
+    for sec in config.sections():
+        if 'dataset' in sec:
+            name_data.append(config[sec]['data_name'])
+            
     # check consistency between [data_use] vs [data*]
     sec_parse=True
     data_use_with=[]
@@ -424,18 +472,25 @@ def check_cfg(cfg_file,config,cfg_file_proto):
         data_use_with.append(data.split(','))
         
     data_use_with=sum(data_use_with, [])
-    
+
     if not(set(data_use_with).issubset(name_data)):
         sys.stderr.write("ERROR: in [data_use] you are using a dataset not specified in [dataset*] %s \n" % (cfg_file))
         sec_parse=False
         
-    
-            
     # Parse fea and lab  fields in datasets*
     cnt=0
     fea_names_lst=[]
     lab_names_lst=[]
     for data in name_data:
+
+        # Check for production case 'none' lab name
+        [lab_names,_,_]=parse_lab_field(config[cfg_item2sec(config,'data_name',data)]['lab'])
+        config['exp']['production']=str('False')
+        if lab_names== ["none"] and data == config['data_use']['forward_with']:
+            config['exp']['production']=str('True')
+            continue
+        elif lab_names == ["none"] and data != config['data_use']['forward_with']:
+            continue
 
         [fea_names,fea_lsts,fea_opts,cws_left,cws_right]=parse_fea_field(config[cfg_item2sec(config,'data_name',data)]['fea'])
         [lab_names,lab_folders,lab_opts]=parse_lab_field(config[cfg_item2sec(config,'data_name',data)]['lab'])
@@ -443,13 +498,20 @@ def check_cfg(cfg_file,config,cfg_file_proto):
         fea_names_lst.append(sorted(fea_names))
         lab_names_lst.append(sorted(lab_names))
         
+        # Check that fea_name doesn't contain special characters
+        for name_features in fea_names_lst[cnt]:
+            if not(re.match("^[a-zA-Z0-9]*$", name_features)):
+                    sys.stderr.write("ERROR: features names (fea_name=) must contain only letters or numbers (no special characters as \"_,$,..\") \n" )
+                    sec_parse=False
+                    sys.exit(0) 
+            
         if cnt>0:
             if fea_names_lst[cnt-1]!=fea_names_lst[cnt]:
-                sys.stderr.write("features name (fea_name) must be the same of all the datasets! \n" )
+                sys.stderr.write("ERROR: features name (fea_name) must be the same of all the datasets! \n" )
                 sec_parse=False
                 sys.exit(0) 
             if lab_names_lst[cnt-1]!=lab_names_lst[cnt]:
-                sys.stderr.write("labels name (lab_name) must be the same of all the datasets! \n" )
+                sys.stderr.write("ERROR: labels name (lab_name) must be the same of all the datasets! \n" )
                 sec_parse=False
                 sys.exit(0) 
             
@@ -474,22 +536,23 @@ def check_cfg(cfg_file,config,cfg_file_proto):
 
         
     for i in range(len(forward_out_lst)):
+
         if forward_out_lst[i] not in possible_outs:
-            sys.stderr.write('ERROR: the output \"%s\" in the section \"forwad_out\" is not defined in section model)\n' %(forward_out_lst[i]))
+            sys.stderr.write('ERROR: the output \"%s\" in the section \"forward_out\" is not defined in section model)\n' %(forward_out_lst[i]))
             sys.exit(0)
 
         if strtobool(forward_norm_bool_lst[i]):
 
             if forward_norm_lst[i] not in lab_lst:
                 if not os.path.exists(forward_norm_lst[i]):
-                    sys.stderr.write('ERROR: the count_file \"%s\" in the section \"forwad_out\" is does not exist)\n' %(forward_norm_lst[i]))
+                    sys.stderr.write('ERROR: the count_file \"%s\" in the section \"forward_out\" is does not exist)\n' %(forward_norm_lst[i]))
                     sys.exit(0)
                 else:
                     # Check if the specified file is in the right format
                     f = open(forward_norm_lst[i],"r")
                     cnts = f.read()
                     if not(bool(re.match("(.*)\[(.*)\]", cnts))):
-                        sys.stderr.write('ERROR: the count_file \"%s\" in the section \"forwad_out\" is not in the right format)\n' %(forward_norm_lst[i]))
+                        sys.stderr.write('ERROR: the count_file \"%s\" in the section \"forward_out\" is not in the right format)\n' %(forward_norm_lst[i]))
                         
                     
             else:
@@ -499,6 +562,10 @@ def check_cfg(cfg_file,config,cfg_file_proto):
                     folder_lab_count=lab_folders[lab_lst.index(forward_norm_lst[i])]
                     cmd="hmm-info "+folder_lab_count+"/final.mdl | awk '/pdfs/{print $4}'"
                     output=run_shell(cmd,log_file)
+                    if output.decode().rstrip()=='':
+                        sys.stderr.write("ERROR: hmm-info command doesn't exist. Make sure your .bashrc contains the Kaldi paths and correctly exports it.\n")
+                        sys.exit(0)
+
                     N_out=int(output.decode().rstrip())
                     N_out_lab[lab_lst.index(forward_norm_lst[i])]=N_out
                     count_file_path=out_folder+'/exp_files/forward_'+forward_out_lst[i]+'_'+forward_norm_lst[i]+'.count'
@@ -525,7 +592,7 @@ def check_cfg(cfg_file,config,cfg_file_proto):
                     if N_out_lab[i]!='none':
                         config[sec][field]=config[sec][field].replace(pattern,str(N_out_lab[i]))
                     else:
-                       sys.stderr.write('ERROR: Cannot automatically retrieve the number of output in %s. Plese, add manually the number of outputs \n' %(pattern))
+                       sys.stderr.write('ERROR: Cannot automatically retrieve the number of output in %s. Please, add manually the number of outputs \n' %(pattern))
                        sys.exit(0)
                        
                        
@@ -618,60 +685,7 @@ def create_chunks(config):
                     f.writelines(tr_chunks_fea_wr)
                     f.close()
     
-    #Training chunk lists creation
-#    tr_data_name=config['data_use']['train_with'].split(',')
-#    [fea_names,fea_lsts,fea_opts,cws_left,cws_right]=parse_fea_field(config[cfg_item2sec(config,'data_name',tr_data_name[0])]['fea'])
-#     
-#    full_list_fea=[]
-#    for i in range(len(fea_names)):
-#        full_list=[]
-#        N_chunks_tr=0
-#        
-#        # Reading training feature lists
-#        for dataset in tr_data_name:
-#            sec_data=cfg_item2sec(config,'data_name',dataset)
-#            [fea_lst,list_fea,fea_opts,cws_left,cws_right]=parse_fea_field(config[cfg_item2sec(config,'data_name',dataset)]['fea'])
-#            N_chunks_tr= N_chunks_tr+int(config[sec_data]['N_chunks'])
-#            full_list.append([line.rstrip('\n')+',' for line in open(list_fea[i])])
-#        
-#        full_list=sum(full_list, [])
-#        full_list=sorted(full_list)
-#        full_list_fea.append(full_list)
-#        
-#    
-#    # concatenating all the featues in a single file (useful for shuffling consistently)
-#    full_list_fea_conc=full_list_fea[0]
-#    for i in range(1,len(full_list_fea)):  
-#        full_list_fea_conc=list(map(str.__add__,full_list_fea_conc,full_list_fea[i]))   
-#    
-#        
-#    for ep in range(N_ep):
-#        
-#        # randomize the list
-#        random.shuffle(full_list_fea_conc)
-#
-#        tr_chunks_fea=list(split_chunks(full_list_fea_conc,N_chunks_tr)) 
-#        tr_chunks_fea.reverse()
-#        # Note: without reverse the shortest chunk is the last one. 
-#        # With reverse I process the shortest chunk first (it is more safe)
-#        
-#        # Writing the lst files for each chunk/epoch
-#        for ck in range(N_chunks_tr):
-#            #print(tr_chunks_fea[ck])
-#            for i in range(len(fea_names)):
-#                
-#                tr_chunks_fea_split=[];
-#                for snt in tr_chunks_fea[ck]:
-#                    #print(snt.split(',')[i])
-#                    tr_chunks_fea_split.append(snt.split(',')[i])
-#                    
-#                output_lst_file=out_folder+'/exp_files/train_'+config['data_use']['train_with'].replace(',','+')+'_ep'+format(ep, "03d")+'_ck'+format(ck, "02d")+'_'+fea_names[i]+'.lst'
-#                f=open(output_lst_file,'w')
-#                tr_chunks_fea_wr=map(lambda x:x+'\n', tr_chunks_fea_split)
-#                f.writelines(tr_chunks_fea_wr)
-#                f.close()             
-                    
-                
+            
     # Validation chunk lists creation    
     valid_data_name=config['data_use']['valid_with'].split(',')
     
@@ -787,16 +801,12 @@ def write_cfg_chunk(cfg_file,config_chunk_file,cfg_file_proto_chunk,pt_files,lst
 
     config_chunk['data_chunk']=config[cfg_item2sec(config,'data_name',data_set_name)]
    
-    
+
     lst_files=sorted(glob.glob(lst_file))
 
-
     current_fea=config_chunk['data_chunk']['fea']
-
-   
     
     list_current_fea=re.findall('fea_name=(.*)\nfea_lst=(.*)\n', current_fea)
-    
     
     for (fea, path) in list_current_fea:
         for path_cand in lst_files:
@@ -876,6 +886,7 @@ def parse_fea_field(fea):
     for fea_lst in fea_lsts:
          if not(os.path.isfile(fea_lst)):
              sys.stderr.write("ERROR: The path \"%s\" specified in the field  \"fea_lst\" of the config file does not exists! \n" % (fea_lst))
+             sys.exit(0)
          else:
              snts = sorted([line.rstrip('\n').split(' ')[0] for line in open(fea_lst)])
              snt_lst.append(snts)
@@ -883,6 +894,7 @@ def parse_fea_field(fea):
              if cnt>0:
                  if snt_lst[cnt-1]!=snt_lst[cnt]:
                      sys.stderr.write("ERROR: the files %s in fea_lst contain a different set of sentences! \n" % (fea_lst))
+                     sys.exit(0)
              cnt=cnt+1
     return [fea_names,fea_lsts,fea_opts,cws_left,cws_right]
 
@@ -923,6 +935,7 @@ def parse_lab_field(lab):
     for lab_fold in lab_folders:
          if not(os.path.isdir(lab_fold)):
              sys.stderr.write("ERROR: The path \"%s\" specified in the field  \"lab_folder\" of the config file does not exists! \n" % (lab_fold))
+             sys.exit(0)
              
     return [lab_names,lab_folders,lab_opts]
 
@@ -1435,6 +1448,9 @@ def model_init(inp_out_dict,model,config,arch_dict,use_cuda,multi_gpu,to_do):
             config.set(arch_dict[inp1][0],'use_cuda',config['exp']['use_cuda'])
             config.set(arch_dict[inp1][0],'to_do',config['exp']['to_do'])
             
+            arch_freeze_flag=strtobool(config[arch_dict[inp1][0]]['arch_freeze'])
+
+            
             # initialize the neural network
             net=nn_class(config[arch_dict[inp1][0]],inp_dim)
     
@@ -1447,7 +1463,11 @@ def model_init(inp_out_dict,model,config,arch_dict,use_cuda,multi_gpu,to_do):
                     
             
             if to_do=='train':
-                net.train()
+                if not(arch_freeze_flag):
+                    net.train()
+                else:
+                   # Switch to eval modality if architecture is frozen (mainly for batch_norm/dropout functions)
+                   net.eval() 
             else:
                 net.eval()
     
@@ -1574,7 +1594,7 @@ def forward_model(fea_dict,lab_dict,arch_dict,model,nns,costs,inp,inp_out_dict,m
                 if len(inp.shape)==3:
                     inp_dnn=inp[:,:,inp_out_dict[inp2][-3]:inp_out_dict[inp2][-2]]
                     if not(bool(arch_dict[inp1][2])):
-                          inp_dnn=inp_dnn.view(max_len*batch_size,-1)
+                        inp_dnn=inp_dnn.view(max_len*batch_size,-1)
                                  
                 if len(inp.shape)==2:
                     inp_dnn=inp[:,inp_out_dict[inp2][-3]:inp_out_dict[inp2][-2]]
@@ -1833,4 +1853,20 @@ def create_curves(out_folder, N_ep, val_lst):
     plt.savefig(out_folder+'/generated_outputs/acc.png')
 
     print('OK')
+
+# Replace the nth pattern in a string
+def nth_replace_string(s, sub, repl, nth):
+    find = s.find(sub)
+
+    # if find is not p1 we have found at least one match for the substring
+    i = find != -1
+    # loop util we find the nth or we find no match
+    while find != -1 and i != nth:
+        # find + 1 means we start at the last match start index + 1
+        find = s.find(sub, find + 1)
+        i += 1
+    # if i  is equal to nth we found nth matches so replace
+    if i == nth:
+        return s[:find]+repl+s[find + len(sub):]
+    return s
     

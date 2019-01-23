@@ -4,7 +4,7 @@ export PYTORCH_KALDI_DIR=`pwd`
 export PYTORCH_EXP=`pwd`/exp
 
 # From /egs/ami path.sh file
-export KALDI_ROOT=/data/akashmjn/kaldi
+export KALDI_ROOT=/tmp/kaldi
 #[ -f $KALDI_ROOT/tools/env.sh ] && . $KALDI_ROOT/tools/env.sh
 export PATH=$PWD/utils/:$KALDI_ROOT/tools/openfst/bin:$PWD:$PATH
 [ ! -f $KALDI_ROOT/tools/config/common_path.sh ] && echo >&2 "The standard file $KALDI_ROOT/tools/config/common_path.sh is not present -> Exit!" && exit 1
@@ -16,4 +16,5 @@ SRILM=$KALDI_ROOT/tools/srilm/bin/i686-m64
 BEAMFORMIT=$KALDI_ROOT/tools/BeamformIt
 
 export PATH=$PATH:$LMBIN:$BEAMFORMIT:$SRILM
-
+# Installing kaldi-io package https://github.com/vesis84/kaldi-io-for-python
+export PYTHONPATH=`dirname $PWD`/kaldi_io:$PYTHONPATH

@@ -38,9 +38,7 @@ def run_command(cmd):
     return ''.join(stdout)
 
 def run_shell_display(cmd):
-    # p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,shell=True)
-    os.system(cmd)
-    return
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,shell=True)
     while True:
         out = p.stdout.read(1).decode('utf-8')
         if out == '' and p.poll() != None:

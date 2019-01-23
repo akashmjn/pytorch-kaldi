@@ -19,7 +19,6 @@ from scipy.ndimage.interpolation import shift
 import kaldi_io
 
 
-
 # Reading chunk-specific cfg file (first argument-mandatory file) 
 cfg_file=sys.argv[1]
 
@@ -163,7 +162,6 @@ loss_sum=0
 err_sum=0
 
 inp_dim=data_set.shape[1]
-
 for i in range(N_batches):   
     
     max_len=0
@@ -198,17 +196,13 @@ for i in range(N_batches):
             beg_snt=data_end_index[snt_index]
             snt_index=snt_index+1
 
-        
     # use cuda
     if use_cuda:
         inp=inp.cuda()
-   
-    # Forward input
-    outs_dict=forward_model(fea_dict,lab_dict,arch_dict,model,nns,costs,inp,inp_out_dict,max_len,batch_size,to_do,forward_outs)
-        
-
 
     if to_do=='train':
+        # Forward input, with autograd graph active
+        outs_dict=forward_model(fea_dict,lab_dict,arch_dict,model,nns,costs,inp,inp_out_dict,max_len,batch_size,to_do,forward_outs)
         
         for opt in optimizers.keys():
             optimizers[opt].zero_grad()
@@ -230,6 +224,10 @@ for i in range(N_batches):
         for opt in optimizers.keys():
             if not(strtobool(config[arch_dict[opt][0]]['arch_freeze'])):
                 optimizers[opt].step()
+    else:
+        with torch.no_grad(): # Forward input without autograd graph (save memory)
+            outs_dict=forward_model(fea_dict,lab_dict,arch_dict,model,nns,costs,inp,inp_out_dict,max_len,batch_size,to_do,forward_outs)
+
                 
     if to_do=='forward':
         for out_id in range(len(forward_outs)):
@@ -247,8 +245,8 @@ for i in range(N_batches):
         # for printing instantaneous values
         batch_loss = round(outs_dict['loss_final'].item(),3)
         batch_err = round(outs_dict['err_final'].item(),3)
-        loss_sum=loss_sum+batch_loss
-        err_sum=err_sum+batch_err
+        loss_sum += batch_loss
+        err_sum += batch_err
        
     # update it to the next batch 
     beg_batch=end_batch
@@ -256,12 +254,12 @@ for i in range(N_batches):
     
     # Progress bar
     if to_do == 'train':
-        status_string="Training |L:{}, Err:{}, Gmax/med:{}/{}| (Batch {}/{})".format(batch_loss,batch_err,
-                                                        grad_max_norm,grad_med_norm,i+1,N_batches)
+        status_string="Training |L:{}, Err:{}, Gmax/med:{}/{}|Len:{}| (Batch {}/{})".format(batch_loss,batch_err,
+                                                        grad_max_norm,grad_med_norm,max_len,i+1,N_batches)
     if to_do == 'valid':
-      status_string="Validating |L:{}, Err:{}| (Batch {}/{})".format(batch_loss,batch_err,i+1,N_batches)
+      status_string="Validating |L:{}, Err:{}|Len:{}| (Batch {}/{})".format(batch_loss,batch_err,max_len,i+1,N_batches)
     if to_do == 'forward':
-      status_string="Forwarding | (Batch {}/{})".format(i+1,N_batches)
+      status_string="Forwarding |Len:{}| (Batch {}/{})".format(max_len,i+1,N_batches)
     
     progress(i, N_batches, status=status_string)
 
@@ -270,6 +268,8 @@ elapsed_time_chunk=time.time() - start_time
 loss_tot=loss_sum/N_batches
 err_tot=err_sum/N_batches
 
+# clearing memory
+del inp, outs_dict, data_set
 
 # save the model
 if to_do=='train':

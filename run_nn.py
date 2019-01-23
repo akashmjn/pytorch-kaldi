@@ -211,7 +211,7 @@ for i in range(N_batches):
         outs_dict['loss_final'].backward()
         
         # Gradient Clipping (th 0.5)
-        grad_max_norm, grad_med_norm, grad_clip_norm = 0.0, np.inf, 0.1
+        grad_max_norm, grad_med_norm, grad_clip_norm = 0.0, np.inf, 0.5
         for net in nns.keys():
             grad_norms = torch.stack(
                         [p.grad.data.norm(2) for p in nns[net].parameters() if p.grad is not None]

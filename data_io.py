@@ -11,7 +11,6 @@ import sys
 from scipy.ndimage.interpolation import shift
 import time
 
-<<<<<<< HEAD
 
 def load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_length,fea_vec):
     if fea_vec:
@@ -25,15 +24,6 @@ def load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_l
         fea={k: np.tile(v,[lab[k].shape[0],1]) for k, v in fea.items() if k in lab} # tile vector for all frames if alignment exists 
     else:
         fea={k: v for k, v in fea.items() if k in lab} # This way I remove all the features without an aligment (see log file in alidir "Did not Succeded")
-=======
-def load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_length, fea_only=False):
-
-    fea = { k:m for k,m in kaldi_io.read_mat_ark('ark:copy-feats scp:'+fea_scp+' ark:- |'+fea_opts) }
-
-    if not fea_only:
-      lab = { k:v for k,v in kaldi_io.read_vec_int_ark('gunzip -c '+lab_folder+'/ali*.gz | '+lab_opts+' '+lab_folder+'/final.mdl ark:- ark:-|')  if k in fea} # Note that I'm copying only the aligments of the loaded fea
-      fea = {k: v for k, v in fea.items() if k in lab} # This way I remove all the features without an aligment (see log file in alidir "Did not Succeded")
->>>>>>> dev-local
 
     end_snt=0
     end_index=[]
@@ -60,16 +50,10 @@ def load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_l
           for i in range((len(fea[k]) + max_sequence_length - 1) // max_sequence_length):
             if(len(fea[k][i * max_sequence_length:]) > max_sequence_length + (max_sequence_length/4)):
               fea_chunked.append(fea[k][i * max_sequence_length:(i + 1) * max_sequence_length])
-              if not fea_only:
-                lab_chunked.append(lab[k][i * max_sequence_length:(i + 1) * max_sequence_length])
-              else:
-                lab_chunked.append(np.zeros((fea[k][i * max_sequence_length:(i + 1) * max_sequence_length].shape[0],)))
+              lab_chunked.append(lab[k][i * max_sequence_length:(i + 1) * max_sequence_length])
             else:
               fea_chunked.append(fea[k][i * max_sequence_length:])
-              if not fea_only:
-                lab_chunked.append(lab[k][i * max_sequence_length:])
-              else:
-                lab_chunked.append(np.zeros((fea[k][i * max_sequence_length:].shape[0],)))
+              lab_chunked.append(lab[k][i * max_sequence_length:])
               break
 
           for j in range(0, len(fea_chunked)):
@@ -79,14 +63,11 @@ def load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_l
             
         else:
           fea_conc.append(fea[k])
-          if not fea_only:
-            lab_conc.append(lab[k])
-          else:
-            lab_conc.append(np.zeros((fea[k].shape[0],)))
+          lab_conc.append(lab[k])
           snt_name.append(k)
 
         tmp+=1
-
+    
     fea_zipped = zip(fea_conc,lab_conc)
     fea_sorted = sorted(fea_zipped, key=lambda x: x[0].shape[0])
     fea_conc,lab_conc = zip(*fea_sorted)
@@ -132,17 +113,10 @@ def context_window(fea,left,right):
     return fea_conc
 
 
-<<<<<<< HEAD
 def load_chunk(fea_scp,fea_opts,lab_folder,lab_opts,left,right,max_sequence_length,fea_vec=False):
   
   # open the file
   [data_name,data_set,data_lab,end_index]=load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_length,fea_vec)
-=======
-def load_chunk(fea_scp,fea_opts,lab_folder,lab_opts,left,right,max_sequence_length, fea_only=False):
-  
-  # open the file
-  [data_name,data_set,data_lab,end_index]=load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_length, fea_only)
->>>>>>> dev-local
 
   # Context window
   if left!=0 or right!=0:
@@ -159,12 +133,13 @@ def load_chunk(fea_scp,fea_opts,lab_folder,lab_opts,left,right,max_sequence_leng
   # Label processing
   data_lab=data_lab-data_lab.min()
   if right>0:
-    data_lab=data_lab[left:-right]
+   data_lab=data_lab[left:-right]
   else:
-    data_lab=data_lab[left:]   
+   data_lab=data_lab[left:]   
   
   data_set=np.column_stack((data_set, data_lab))
 
+   
   return [data_name,data_set,end_index]
 
 def load_counts(class_counts_file):
@@ -173,7 +148,9 @@ def load_counts(class_counts_file):
         counts = np.array([ np.float32(v) for v in row.split() ])
     return counts 
 
-def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length, fea_only=False):
+
+
+def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
     
     # Estimate total number of frames in this chunk by relatively quickly reading alignments
     fea_scp = list(fea_dict.values())[0][1]
@@ -201,7 +178,6 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length, fea_
         fea_vec='vec' in fea
         fea_dim=int(fea_dict[fea].pop()) # hacked in fea_dim. bad practice to modify arg like this
         
-<<<<<<< HEAD
         for cnt_lab, lab in enumerate(lab_dict.keys()):
             
             lab_folder, lab_opts = lab_dict[lab][1], lab_dict[lab][2]
@@ -225,26 +201,6 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length, fea_
             if data_end_index is not None and not(data_end_index==data_end_index_fea).all():
                 sys.stderr.write('ERROR end_index must be the same for all the sentences"\n')
                 sys.exit(0)
-=======
-        cnt_lab=0
-
-        # Production case, we don't have labels (lab_name = none)
-        if fea_only:
-          lab_dict.update({'lab_name':'none'})
-
-        for lab in lab_dict.keys():
-            
-            # Production case, we don't have labels (lab_name = none)
-            if fea_only:
-              lab_folder=None 
-              lab_opts=None
-            else:
-              lab_folder=lab_dict[lab][1]
-              lab_opts=lab_dict[lab][2]
-    
-            [data_name_fea,data_set_fea,data_end_index_fea]=load_chunk(fea_scp,fea_opts,lab_folder,lab_opts,cw_left,cw_right,max_seq_length, fea_only)
-    
->>>>>>> dev-local
             
             data_name, data_end_index = data_name_fea, data_end_index_fea
     
@@ -293,20 +249,7 @@ for lab in lab_dict.keys():
     lab_dict[lab].append(data_set.shape[1]+cnt_lab)
     cnt_lab=cnt_lab+1
         
-<<<<<<< HEAD
 data_set=np.column_stack((data_set,labs))
 """
-=======
-    cnt_lab=0
-    if not fea_only:   
-      for lab in lab_dict.keys():
-          lab_dict[lab].append(data_set.shape[1]+cnt_lab)
-          cnt_lab=cnt_lab+1
-           
-    data_set=np.column_stack((data_set,labs))
-
-    
-    return [data_name,data_set,data_end_index]
->>>>>>> dev-local
 
 

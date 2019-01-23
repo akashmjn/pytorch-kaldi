@@ -25,6 +25,7 @@ import matplotlib.pyplot as plt
 import os
 
 
+
 def run_command(cmd):
     """from http://blog.kagesenshi.org/2008/02/teeing-python-subprocesspopen-output.html
     """
@@ -239,7 +240,7 @@ def check_field(inp,type_inp,field):
         try: 
             list(map(int,lst))
         except ValueError:
-            sys.stderr.write("ERROR: The field \"%s\" can only contain a list of integer (got \"%s\") \n" % (field,inp))
+            sys.stderr.write("ERROR: The field \"%s\" can only contain a list of integer (got \"%s\").  Make also sure there aren't white spaces between commas.\n" % (field,inp))
             valid_field=False
             sys.exit(0)
 
@@ -265,7 +266,7 @@ def check_field(inp,type_inp,field):
         try: 
             list(map(float,lst))
         except ValueError:
-            sys.stderr.write("ERROR: The field \"%s\" can only contain a list of floats (got \"%s\") \n" % (field,inp))
+            sys.stderr.write("ERROR: The field \"%s\" can only contain a list of floats (got \"%s\"). Make also sure there aren't white spaces between commas. \n" % (field,inp))
             valid_field=False
             sys.exit(0)
         # Check if the value if within the expected range
@@ -291,7 +292,7 @@ def check_field(inp,type_inp,field):
         inps=inp.split(',')
         for elem in inps:
             if not(elem in lst):
-                sys.stderr.write("ERROR: The field \"%s\" can only contain a list of boolean (got \"%s\") \n" % (field,inp))
+                sys.stderr.write("ERROR: The field \"%s\" can only contain a list of boolean (got \"%s\"). Make also sure there aren't white spaces between commas.\n" % (field,inp))
                 valid_field=False
                 sys.exit(0)
                     

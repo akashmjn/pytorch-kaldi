@@ -83,7 +83,7 @@ start_time = time.time()
 [cw_left_max,cw_right_max]=compute_cw_max(fea_dict)
 
 # Reading all the features and labels
-[data_name,data_set,data_end_index]=read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length,is_production)
+[data_name,data_set,data_end_index]=read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length)
 
 # Randomize if the model is not sequential
 if not(seq_model) and to_do!='forward':

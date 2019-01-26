@@ -14,6 +14,10 @@
 cfg_file=$1
 out_folder=$2
 
+## Begin configuration section
+num_threads=1
+stage=0
+cmd=utils/run.pl
 
 
 # Reading the options in the cfg file
@@ -23,12 +27,6 @@ cd $decoding_script_folder
 
 ./path.sh
 ./cmd.sh
-
-
-## Begin configuration section
-num_threads=1
-stage=0
-cmd=utils/run.pl
 
 
 echo "$0 $@"  # Print the command line for logging

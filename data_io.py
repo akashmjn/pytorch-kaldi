@@ -34,7 +34,8 @@ def load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_l
     # TODO: Fix memory inefficiency in using lists + concatentation here
     
     tmp=0
-    for k in sorted(sorted(fea.keys()), key=lambda k: len(fea[k])):
+    utt_ids = np.random.shuffle(fea.keys())
+    for k in utt_ids:
 
         #####
         # If the sequence length is above the threshold, we split it with a minimal length max/4
@@ -42,7 +43,8 @@ def load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_l
         # A seq of length 625 will be splitted in one of 500 and one of 125
 
         
-        if(len(fea[k]) > max_sequence_length) and max_sequence_length>0:
+        #if(len(fea[k]) > max_sequence_length) and max_sequence_length>0:
+        if False: # TODO:(akash) clean up all these hacks 
 
           fea_chunked = []
           lab_chunked = []
@@ -68,9 +70,9 @@ def load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_l
 
         tmp+=1
     
-    fea_zipped = zip(fea_conc,lab_conc)
-    fea_sorted = sorted(fea_zipped, key=lambda x: x[0].shape[0])
-    fea_conc,lab_conc = zip(*fea_sorted)
+    # fea_zipped = zip(fea_conc,lab_conc)
+    # fea_sorted = sorted(fea_zipped, key=lambda x: x[0].shape[0])
+    # fea_conc,lab_conc = zip(*fea_sorted)
       
     for entry in fea_conc:
       end_snt=end_snt+entry.shape[0]

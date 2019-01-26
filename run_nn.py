@@ -87,6 +87,15 @@ start_time = time.time()
 # Randomize if the model is not sequential
 if not(seq_model) and to_do!='forward':
     np.random.shuffle(data_set)
+    inp_dim=data_set.shape[1] # TODO: thankfully doesn't pass labels to dnn. see forward_model
+else:
+    # Pad zeros and fold long series of utterances into batch_size num of sequences 
+    n_seq_zero_pad = batch_size - (data_set.shape[0]%batch_size)
+    npad_tup, ndim = ((n_seq_zero_pad,0),(0,0)), data_set.shape[1]
+    # n_seq_zero_pad frames w/ 0 label, 0 values added to batch 0
+    data_set = np.pad(data_set,pad_width=npad_tup,mode='constant',constant_values=0)
+    data_set = data_set.reshape((batch_size,-1,ndim)).transpose((1,0,2))
+    inp_dim=data_set.shape[2] # TODO: thankfully doesn't pass labels to dnn. see forward_model
 
 
 elapsed_time_reading=time.time() - start_time 
@@ -140,7 +149,7 @@ if seq_model or to_do=='forward':
     N_batches=int(N_snt/batch_size)
 else:
     N_ex_tr=data_set.shape[0]
-    N_batches=int(N_ex_tr/batch_size)
+    N_batches=int(data_set.shape[0]/max_seq_length) # TODO: ignores the last batch that's < max_seq_length
     
 
 beg_batch=0
@@ -153,37 +162,38 @@ beg_snt=0
 start_time = time.time()
 
 # array of sentence lengths
-arr_snt_len=shift(shift(data_end_index, -1)-data_end_index,1)
-arr_snt_len[0]=data_end_index[0]
+# arr_snt_len=shift(shift(data_end_index, -1)-data_end_index,1)
+# arr_snt_len[0]=data_end_index[0]
 
 
 loss_sum=0
 err_sum=0
 
-inp_dim=data_set.shape[1]
 for i in range(N_batches):   
     
     max_len=0
 
     if seq_model:
      
-     max_len=int(max(arr_snt_len[snt_index:snt_index+batch_size]))  
-     inp= torch.zeros(max_len,batch_size,inp_dim).contiguous()
+        inp = data_set[beg_snt:beg_snt+max_seq_length,:,:].contiguous()
+        beg_snt, max_len = beg_snt+max_seq_length, max_seq_length
+    #  max_len=int(max(arr_snt_len[snt_index:snt_index+batch_size]))  
+    #  inp= torch.zeros(max_len,batch_size,inp_dim).contiguous()
 
         
-     for k in range(batch_size):
+    #  for k in range(batch_size):
           
-              snt_len=data_end_index[snt_index]-beg_snt
-              N_zeros=max_len-snt_len
+    #           snt_len=data_end_index[snt_index]-beg_snt
+    #           N_zeros=max_len-snt_len
               
-              # Appending a random number of initial zeros, tge others are at the end. 
-              N_zeros_left=random.randint(0,N_zeros)
+    #           # Appending a random number of initial zeros, tge others are at the end. 
+    #           N_zeros_left=random.randint(0,N_zeros)
              
-              # randomizing could have a regularization effect
-              inp[N_zeros_left:N_zeros_left+snt_len,k,:]=data_set[beg_snt:beg_snt+snt_len,:]
+    #           # randomizing could have a regularization effect
+    #           inp[N_zeros_left:N_zeros_left+snt_len,k,:]=data_set[beg_snt:beg_snt+snt_len,:]
               
-              beg_snt=data_end_index[snt_index]
-              snt_index=snt_index+1
+    #           beg_snt=data_end_index[snt_index]
+    #           snt_index=snt_index+1
             
     else:
         # features and labels for batch i

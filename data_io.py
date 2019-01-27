@@ -34,7 +34,8 @@ def load_dataset(fea_scp,fea_opts,lab_folder,lab_opts,left,right, max_sequence_l
     # TODO: Fix memory inefficiency in using lists + concatentation here
     
     tmp=0
-    utt_ids = np.random.shuffle(fea.keys())
+    utt_ids = list(fea.keys())
+    np.random.shuffle(utt_ids)
     for k in utt_ids:
 
         #####

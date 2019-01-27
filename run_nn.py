@@ -89,12 +89,11 @@ if not(seq_model) and to_do!='forward':
     np.random.shuffle(data_set)
     inp_dim=data_set.shape[1] # TODO: thankfully doesn't pass labels to dnn. see forward_model
 else:
-    # Pad zeros and fold long series of utterances into batch_size num of sequences 
-    n_seq_zero_pad = batch_size - (data_set.shape[0]%batch_size)
-    npad_tup, ndim = ((n_seq_zero_pad,0),(0,0)), data_set.shape[1]
-    # n_seq_zero_pad frames w/ 0 label, 0 values added to batch 0
-    data_set = np.pad(data_set,pad_width=npad_tup,mode='constant',constant_values=0)
+    # fold long series of utterances into batch_size num of sequences 
+    nframes_rounded, ndim = data_set.shape[0] - (data_set.shape[0]%batch_size), data_set.shape[1]
+    data_set = data_set[:nframes_rounded,:]
     data_set = data_set.reshape((batch_size,-1,ndim)).transpose((1,0,2))
+    print("Reshaped chunk of {} frames to {}".format(nframes_rounded,str(data_set.shape)))
     inp_dim=data_set.shape[2] # TODO: thankfully doesn't pass labels to dnn. see forward_model
 
 
@@ -146,10 +145,10 @@ if to_do=='forward':
 # ***** Minibatch Processing loop********
 if seq_model or to_do=='forward':
     N_snt=len(data_name)
-    N_batches=int(N_snt/batch_size)
+    N_batches=int(data_set.shape[0]/max_seq_length) # TODO: ignores the last batch that's < max_seq_length
 else:
     N_ex_tr=data_set.shape[0]
-    N_batches=int(data_set.shape[0]/max_seq_length) # TODO: ignores the last batch that's < max_seq_length
+    N_batches=int(N_ex_tr/batch_size)
     
 
 beg_batch=0

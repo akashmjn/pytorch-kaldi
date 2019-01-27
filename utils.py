@@ -60,7 +60,7 @@ def run_shell(cmd,log_file):
         logfile.write(output.decode("utf-8")+'\n')
         logfile.write(err.decode("utf-8")+'\n')
     
-    #print(output.decode("utf-8"))    
+    print(output.decode("utf-8"))    
     return output
 
 

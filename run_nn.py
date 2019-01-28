@@ -87,14 +87,14 @@ start_time = time.time()
 # Randomize if the model is not sequential
 if not(seq_model) and to_do!='forward':
     np.random.shuffle(data_set)
-    inp_dim=data_set.shape[1] # TODO: thankfully doesn't pass labels to dnn. see forward_model
 else:
     # fold long series of utterances into batch_size num of sequences 
     nframes_rounded, ndim = data_set.shape[0] - (data_set.shape[0]%batch_size), data_set.shape[1]
     data_set = data_set[:nframes_rounded,:]
     data_set = data_set.reshape((batch_size,-1,ndim)).transpose((1,0,2))
     print("Reshaped chunk of {} frames to {}".format(nframes_rounded,str(data_set.shape)))
-    inp_dim=data_set.shape[2] # TODO: thankfully doesn't pass labels to dnn. see forward_model
+if seq_model: inp_dim=data_set.shape[2]
+else: inp_dim=data_set.shape[1] # TODO: doesn't pass labels to dnn. see forward_model
 
 
 elapsed_time_reading=time.time() - start_time 
@@ -143,12 +143,19 @@ if to_do=='forward':
 
 
 # ***** Minibatch Processing loop********
-if seq_model or to_do=='forward':
-    N_snt=len(data_name)
+N_snt=len(data_name)
+if to_do=='forward':
+    N_batches=int(N_snt/batch_size) if N_snt%batch_size==0 else int(N_snt/batch_size)+1
+    snt_lookup=[] # indexing into data_set via [ (snt_name,(start_idx,end_idx)) ]
+    for i in range(N_snt): 
+        if i==0: snt_lookup.append((data_name[i],(0,data_end_index[i]))) 
+        else: snt_lookup.append((data_name[i],(data_end_index[i-1],data_end_index[i])))
+    snt_lookup.sort(key=lambda x: x[1][1]-x[1][0]) # sort in increasing length
+    arr_snt_len=[name_idx_tup[1][1]-name_idx_tup[1][0] for name_idx_tup in snt_lookup] # array of sentence lengths
+elif seq_model:
     N_batches=int(data_set.shape[0]/max_seq_length) # TODO: ignores the last batch that's < max_seq_length
 else:
-    N_ex_tr=data_set.shape[0]
-    N_batches=int(N_ex_tr/batch_size)
+    N_batches=int(data_set.shape[0]/batch_size)
     
 
 beg_batch=0
@@ -160,9 +167,6 @@ beg_snt=0
 
 start_time = time.time()
 
-# array of sentence lengths
-# arr_snt_len=shift(shift(data_end_index, -1)-data_end_index,1)
-# arr_snt_len[0]=data_end_index[0]
 
 
 loss_sum=0
@@ -173,9 +177,17 @@ for i in range(N_batches):
     max_len=0
 
     if seq_model:
-     
-        inp = data_set[beg_snt:beg_snt+max_seq_length,:,:].contiguous()
-        beg_snt, max_len = beg_snt+max_seq_length, max_seq_length
+        if to_do=='forward':
+            batch_size = min(batch_size,N_snt-beg_batch) # for remainder if N_snt%batch_size!=0 
+            # create batch of sentences from lookup (snt_name,(start_idx,end_idx)) 
+            batch_idxs = [ name_idx_tup[1] for name_idx_tup in snt_lookup[beg_batch:beg_batch+batch_size] ]
+            max_len = max([ s[1]-s[0] for s in batch_idxs ])
+            inp = torch.zeros(max_len,batch_size,inp_dim).contiguous()
+            for k,s in enumerate(batch_idxs): inp[:s[1]-s[0],k,:] = data_set[s[0]:s[1],0,:]
+        else:
+            max_len = max_seq_length
+            inp = data_set[beg_snt:beg_snt+max_len,:,:].contiguous()
+            beg_snt += max_len
     #  max_len=int(max(arr_snt_len[snt_index:snt_index+batch_size]))  
     #  inp= torch.zeros(max_len,batch_size,inp_dim).contiguous()
 
@@ -196,7 +208,7 @@ for i in range(N_batches):
             
     else:
         # features and labels for batch i
-        if to_do!='forward':
+        if to_do!='forward': # TODO(akash) support batched forward for non-seq models
             inp= data_set[beg_batch:end_batch,:].contiguous()
         else:
             snt_len=data_end_index[snt_index]-beg_snt
@@ -238,17 +250,21 @@ for i in range(N_batches):
 
                 
     if to_do=='forward':
+        if not seq_model: # TODO(akash) implement batched forward for non-seq models
+            raise Exception("Batched forward not implemented for non-seq models yet")
+        
+        # do for each batch, save only unpadded part  
         for out_id in range(len(forward_outs)):
-            
             out_save=outs_dict[forward_outs[out_id]].data.cpu().numpy()
-            
-            if forward_normalize_post[out_id]:
-                # read the config file
-                counts = load_counts(forward_count_files[out_id])
-                out_save=out_save-np.log(counts/np.sum(counts))             
-                
-            # save the output    
-            kaldi_io.write_mat(post_file[forward_outs[out_id]], out_save, data_name[i])
+            for k, name_idx_tup in enumerate(snt_lookup[beg_batch:beg_batch+batch_size]):
+                # save kth utterance in batch - truncate to only padded part 
+                if forward_normalize_post[out_id]:
+                    # read the config file
+                    counts = load_counts(forward_count_files[out_id])
+                    out_save=out_save-np.log(counts/np.sum(counts))             
+                    
+                # save the output    
+                kaldi_io.write_mat(post_file[forward_outs[out_id]], out_save, name_idx_tup[0])
     else:
         # for printing instantaneous values
         batch_loss = round(outs_dict['loss_final'].item(),3)

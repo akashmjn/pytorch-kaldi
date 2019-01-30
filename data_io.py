@@ -171,6 +171,10 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
 
     # TODO: leave some buffer in data_set matrix (for now ck_nframes is exact)
     # TODO: this works for single label, no cw case, untested for others 
+
+    # seed ensures same relative utt order between load_chunk calls
+    # absolute order will differ next time read_lab_fea called on this chunk
+    ck_random_seed = np.random.randint(256)
  
     fea_index, data_name, data_end_index = 0, None, None
     for cnt_fea, fea in enumerate(fea_dict.keys()):
@@ -184,7 +188,7 @@ def read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length):
         for cnt_lab, lab in enumerate(lab_dict.keys()):
             
             lab_folder, lab_opts = lab_dict[lab][1], lab_dict[lab][2]
-   
+            np.random.seed(ck_random_seed)
             # copy features into corresponding cols of data_set matrix
             [ data_name_fea,
               data_set[:,fea_index:fea_index+fea_dim+1],

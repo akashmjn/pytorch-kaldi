@@ -128,10 +128,15 @@ def load_chunk(fea_scp,fea_opts,lab_folder,lab_opts,left,right,max_sequence_leng
   end_index=end_index-left
   end_index[-1]=end_index[-1]-right
 
-  # mean and variance normalization
-  data_set_means, data_set_std = np.mean(data_set,axis=0), np.std(data_set,axis=0)
-  data_set -= data_set_means # inplace operations for memory efficiency
-  data_set /= data_set_std
+  if fea_vec:
+      # for xvectors normalize each vector to unit norm
+      data_set_norms = np.linalg.norm(data_set,axis=1,keepdims=True)
+      data_set /= data_set_norms
+  else:
+      # for other features mean and variance normalization
+      data_set_means, data_set_std = np.mean(data_set,axis=0), np.std(data_set,axis=0)
+      data_set -= data_set_means # inplace operations for memory efficiency
+      data_set /= data_set_std
 
   # Label processing
   data_lab=data_lab-data_lab.min()

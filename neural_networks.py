@@ -69,11 +69,12 @@ class MLP(nn.Module):
         
        
         self.wx  = nn.ModuleList([])
-        self.bn  = nn.ModuleList([])
-        self.ln  = nn.ModuleList([])
         self.act = nn.ModuleList([])
         self.drop = nn.ModuleList([])
-       
+        if any(self.dnn_use_batchnorm):
+           self.bn  = nn.ModuleList([])
+        if any(self.dnn_use_laynorm):
+           self.ln  = nn.ModuleList([])
   
         # input layer normalization
         if self.dnn_use_laynorm_inp:
@@ -102,8 +103,10 @@ class MLP(nn.Module):
              add_bias=True
              
              # layer norm initialization
-             self.ln.append(LayerNorm(self.dnn_lay[i]))
-             self.bn.append(nn.BatchNorm1d(self.dnn_lay[i],momentum=0.05))
+             if any(self.dnn_use_batchnorm):
+                self.bn.append(nn.BatchNorm1d(self.dnn_lay[i],momentum=0.05))
+             if any(self.dnn_use_laynorm):
+                self.ln.append(LayerNorm(self.dnn_lay[i]))
              
              if self.dnn_use_laynorm[i] or self.dnn_use_batchnorm[i]:
                  add_bias=False
@@ -297,12 +300,14 @@ class LSTM(nn.Module):
         self.wcx  = nn.ModuleList([]) # Cell state
         self.uch = nn.ModuleList([])  # Cell state
         
-        self.ln  = nn.ModuleList([]) # Layer Norm
-        self.bn_wfx  = nn.ModuleList([]) # Batch Norm
-        self.bn_wix  = nn.ModuleList([]) # Batch Norm
-        self.bn_wox  = nn.ModuleList([]) # Batch Norm
-        self.bn_wcx = nn.ModuleList([]) # Batch Norm
-        
+        if any(self.lstm_use_batchnorm):
+           self.bn_wfx  = nn.ModuleList([]) # Batch Norm
+           self.bn_wix  = nn.ModuleList([]) # Batch Norm
+           self.bn_wox  = nn.ModuleList([]) # Batch Norm
+           self.bn_wcx = nn.ModuleList([]) # Batch Norm
+        if any(self.lstm_use_laynorm):
+           self.ln  = nn.ModuleList([]) # Layer Norm
+
         self.act  = nn.ModuleList([]) # Activations
        
   
@@ -352,12 +357,14 @@ class LSTM(nn.Module):
             
              
              # batch norm initialization
-             self.bn_wfx.append(nn.BatchNorm1d(self.lstm_lay[i],momentum=0.05))
-             self.bn_wix.append(nn.BatchNorm1d(self.lstm_lay[i],momentum=0.05))
-             self.bn_wox.append(nn.BatchNorm1d(self.lstm_lay[i],momentum=0.05))
-             self.bn_wcx.append(nn.BatchNorm1d(self.lstm_lay[i],momentum=0.05))
+             if any(self.lstm_use_batchnorm):
+                 self.bn_wfx.append(nn.BatchNorm1d(self.lstm_lay[i],momentum=0.05))
+                 self.bn_wix.append(nn.BatchNorm1d(self.lstm_lay[i],momentum=0.05))
+                 self.bn_wox.append(nn.BatchNorm1d(self.lstm_lay[i],momentum=0.05))
+                 self.bn_wcx.append(nn.BatchNorm1d(self.lstm_lay[i],momentum=0.05))
                 
-             self.ln.append(LayerNorm(self.lstm_lay[i]))
+             if any(self.lstm_use_laynorm):
+                 self.ln.append(LayerNorm(self.lstm_lay[i]))
                 
              if self.bidir:
                  current_input=2*self.lstm_lay[i]

@@ -150,6 +150,28 @@ class MLP(nn.Module):
           
       return x
 
+class AffineTransformDeep(nn.Module):
+    def __init__(self,options,inp_dim):
+        super(AffineTransformDeep,self).__init__()
+        self.input_dim=inp_dim
+        self.fea_dim=int(options['fea_dim'])
+        self.aux_dim=self.input_dim-self.fea_dim
+        if self.aux_dim < self.fea_dim/4:
+            raise Warning("Auxillary dimension {} much smaller than fea dim {}. Check if something wrong".format(self.aux_dim,self.fea_dim))
+        self.out_dim=self.input_dim
+        self.dropout=float(options['dropout'])
+        self.dnn_act=options['dnn_act'].strip()
+        # create module lists
+        self.wx = nn.ModuleList([
+            nn.Dropout(p=self.dropout)()
+            nn.Linear(self.input_dim, self.fea_dim,bias=True)
+            ])
+        self.act = nn.ModuleList([])
+        self.drop = nn.ModuleList([])
+    
+    def forward(self,x):
+
+
 
 class LSTM_cudnn(nn.Module):
     

@@ -159,19 +159,21 @@ class LSTM_cudnn(nn.Module):
         self.input_dim=inp_dim
         self.hidden_size=int(options['hidden_size'])
         self.num_layers=int(options['num_layers'])
-        self.bias=strtobool(options['bias'])
-        self.batch_first=strtobool(options['batch_first'])
+        self.bias=bool(strtobool(options['bias']))
+        self.batch_first=bool(strtobool(options['batch_first']))
         self.dropout=float(options['dropout'])
-        self.bidirectional=strtobool(options['bidirectional'])
+        self.bidirectional=bool(strtobool(options['bidirectional']))
         
-        self.lstm = nn.ModuleList([nn.LSTM(self.input_dim, self.hidden_size, self.num_layers, 
-                            bias=self.bias,dropout=self.dropout,bidirectional=self.bidirectional)])
+        self.lstm = nn.ModuleList([nn.LSTM(
+                            input_size=self.input_dim,hidden_size=self.hidden_size,num_layers=self.num_layers, 
+                            bias=self.bias,batch_first=self.batch_first,dropout=self.dropout,bidirectional=self.bidirectional
+                           )])
          
         self.out_dim=self.hidden_size+self.bidirectional*self.hidden_size
-               
         
+
     def forward(self, x):
-        
+
         if self.bidirectional:
             h0 = torch.zeros(self.num_layers*2, x.shape[1], self.hidden_size)
             c0 = torch.zeros(self.num_layers*2, x.shape[1], self.hidden_size)

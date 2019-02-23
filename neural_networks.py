@@ -33,13 +33,13 @@ class MultiRNNLayerBridge(nn.Module):
     Using this implicitly assumes h0, c0 starting from zero.
     TODO: Extend with layernorm
     """
-    def __init__(self,dropout=None,project_dims=None):
+    def __init__(self,dropout=None,projection_dims=None):
         super(MultiRNNLayerBridge,self).__init__()
         self.dropout=dropout
-        self.project_dims=project_dims
+        self.projection_dims=projection_dims
         Ops = []
-        if self.project_dims is not None:
-            Ops.append(nn.Linear(*project_dims))
+        if self.projection_dims is not None:
+            Ops.append(nn.Linear(*projection_dims))
         if self.dropout is not None:
             Ops.append(nn.Dropout(dropout))
         self.Ops = nn.Sequential(*Ops)
@@ -176,7 +176,7 @@ class LSTM_cudnn(nn.Module):
         
         self.input_dim=inp_dim
         self.hidden_size=int(options['hidden_size'])
-        self.project_size=int(options['project_size'])
+        self.projection_size=int(options['projection_size'])
         self.num_layers=int(options['num_layers'])
         self.bias=bool(strtobool(options['bias']))
         self.batch_first=bool(strtobool(options['batch_first']))
@@ -185,9 +185,9 @@ class LSTM_cudnn(nn.Module):
         self.bidirectional=bool(strtobool(options['bidirectional']))
 
         self.out_dim=self.hidden_size+self.bidirectional*self.hidden_size
-        if self.project_size > 0:
-            _lay_dim, _project_dims = self.project_size, (self.out_dim,self.project_size)
-        else: _lay_dim, _project_dims = self.out_dim, None
+        if self.projection_size > 0:
+            _lay_dim, _projection_dims = self.projection_size, (self.out_dim,self.projection_size)
+        else: _lay_dim, _projection_dims = self.out_dim, None
         self.layers = nn.ModuleList([]) 
         for i in range(self.num_layers):
             if i == 0:
@@ -195,14 +195,14 @@ class LSTM_cudnn(nn.Module):
                     nn.LSTM(input_size=self.input_dim,hidden_size=self.hidden_size,num_layers=1,
                             bias=self.bias,batch_first=self.batch_first,
                             bidirectional=self.bidirectional),
-                    MultiRNNLayerBridge(dropout=self.dropout,project_dims=_project_dims)
+                    MultiRNNLayerBridge(dropout=self.dropout,projection_dims=_projection_dims)
                 )
             elif i < self.num_layers-1:
                 layer = nn.Sequential(
                     nn.LSTM(input_size=_lay_dim,hidden_size=self.hidden_size,num_layers=1,
                             bias=self.bias,batch_first=self.batch_first,
                             bidirectional=self.bidirectional),
-                    MultiRNNLayerBridge(dropout=self.dropout,project_dims=_project_dims)
+                    MultiRNNLayerBridge(dropout=self.dropout,projection_dims=_projection_dims)
                 )
             else:
                 layer = nn.Sequential(

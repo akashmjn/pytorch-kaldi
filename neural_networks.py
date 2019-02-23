@@ -14,7 +14,6 @@ from distutils.util import strtobool
 import sys
 import math
 
-
 class LayerNorm(nn.Module):
 
     def __init__(self, features, eps=1e-6):
@@ -28,6 +27,25 @@ class LayerNorm(nn.Module):
         std = x.std(-1, keepdim=True)
         return self.gamma * (x - mean) / (std + self.eps) + self.beta
 
+class MultiRNNLayerBridge(nn.Module):
+    """
+    Little hack module to make layering of LSTMs simpler.
+    Using this implicitly assumes h0, c0 starting from zero.
+    TODO: Extend with layernorm
+    """
+    def __init__(self,dropout=None,project_dims=None):
+        super(MultiRNNLayerBridge,self).__init__()
+        self.dropout=dropout
+        self.project_dims=project_dims
+        Ops = []
+        if self.project_dims is not None:
+            Ops.append(nn.Linear(*project_dims))
+        if self.dropout is not None:
+            Ops.append(nn.Dropout(dropout))
+        self.Ops = nn.Sequential(*Ops)
+    def forward(self,rnn_result):
+        output, _ = rnn_result
+        return self.Ops(output)
 
 def act_fun(act_type):
 
@@ -158,36 +176,59 @@ class LSTM_cudnn(nn.Module):
         
         self.input_dim=inp_dim
         self.hidden_size=int(options['hidden_size'])
+        self.project_size=int(options['project_size'])
         self.num_layers=int(options['num_layers'])
         self.bias=bool(strtobool(options['bias']))
         self.batch_first=bool(strtobool(options['batch_first']))
+        self.layer_norm=bool(strtobool(options['layer_norm']))
         self.dropout=float(options['dropout'])
         self.bidirectional=bool(strtobool(options['bidirectional']))
-        
-        self.lstm = nn.ModuleList([nn.LSTM(
-                            input_size=self.input_dim,hidden_size=self.hidden_size,num_layers=self.num_layers, 
-                            bias=self.bias,batch_first=self.batch_first,dropout=self.dropout,bidirectional=self.bidirectional
-                           )])
-         
+
         self.out_dim=self.hidden_size+self.bidirectional*self.hidden_size
+        if self.project_size > 0:
+            _lay_dim, _project_dims = self.project_size, (self.out_dim,self.project_size)
+        else: _lay_dim, _project_dims = self.out_dim, None
+        self.layers = nn.ModuleList([]) 
+        for i in range(self.num_layers):
+            if i == 0:
+                layer = nn.Sequential(
+                    nn.LSTM(input_size=self.input_dim,hidden_size=self.hidden_size,num_layers=1,
+                            bias=self.bias,batch_first=self.batch_first,
+                            bidirectional=self.bidirectional),
+                    MultiRNNLayerBridge(dropout=self.dropout,project_dims=_project_dims)
+                )
+            elif i < self.num_layers-1:
+                layer = nn.Sequential(
+                    nn.LSTM(input_size=_lay_dim,hidden_size=self.hidden_size,num_layers=1,
+                            bias=self.bias,batch_first=self.batch_first,
+                            bidirectional=self.bidirectional),
+                    MultiRNNLayerBridge(dropout=self.dropout,project_dims=_project_dims)
+                )
+            else:
+                layer = nn.Sequential(
+                    nn.LSTM(input_size=_lay_dim,hidden_size=self.hidden_size,num_layers=1,
+                            bias=self.bias,batch_first=self.batch_first,
+                            bidirectional=self.bidirectional)
+                )
+            self.layers.append(layer)
+        self.lstm = nn.Sequential(*self.layers) 
         
 
     def forward(self, x):
 
-        if self.bidirectional:
-            h0 = torch.zeros(self.num_layers*2, x.shape[1], self.hidden_size)
-            c0 = torch.zeros(self.num_layers*2, x.shape[1], self.hidden_size)
-        else:
-            h0 = torch.zeros(self.num_layers, x.shape[1], self.hidden_size)
-            c0 = torch.zeros(self.num_layers, x.shape[1], self.hidden_size)
+        # if self.bidirectional:
+        #     h0 = torch.zeros(self.num_layers*2, x.shape[1], self.hidden_size)
+        #     c0 = torch.zeros(self.num_layers*2, x.shape[1], self.hidden_size)
+        # else:
+        #     h0 = torch.zeros(self.num_layers, x.shape[1], self.hidden_size)
+        #     c0 = torch.zeros(self.num_layers, x.shape[1], self.hidden_size)
             
-        if x.is_cuda:
-            h0=h0.cuda()
-            c0=c0.cuda()
+        # if x.is_cuda:
+        #     h0=h0.cuda()
+        #     c0=c0.cuda()
             
-            
-        output, (hn, cn) = self.lstm[0](x, (h0, c0))
-        
+        # output, (hn, cn) = self.lstm(x, (h0, c0))
+        output, (hn,cn) = self.lstm(x)   # assumes h0,c0 starting from zeros     
         
         return output
     

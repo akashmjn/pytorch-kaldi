@@ -1,6 +1,6 @@
 [proto]
 hidden_size=int
-reprojection_size=int
+projection_size=int
 num_layers=int
 bias=bool
 batch_first=bool

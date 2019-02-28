@@ -152,7 +152,7 @@ if to_do=='forward':
     for i in range(N_snt): 
         if i==0: snt_lookup.append((data_name[i],(0,data_end_index[i]))) 
         else: snt_lookup.append((data_name[i],(data_end_index[i-1],data_end_index[i])))
-    snt_lookup.sort(key=lambda x: x[1][1]-x[1][0],reverse=True) # sort in increasing length
+    snt_lookup.sort(key=lambda x: x[1][1]-x[1][0],reverse=True) # sort in decreasing length
 elif seq_model:
     N_batches=int(data_set.shape[0]/max_seq_length) # TODO: ignores the last batch that's < max_seq_length
 else:

@@ -160,6 +160,7 @@ for i, inp in enumerate(dataloader):
             if not(strtobool(config[arch_dict[opt][0]]['arch_freeze'])):
                 optimizers[opt].step()
     else:
+        batch_size = inp.shape[1]
         with torch.no_grad(): # Forward input without autograd graph (save memory)
             outs_dict=forward_model(fea_dict,lab_dict,arch_dict,model,nns,costs,inp,inp_out_dict,max_len,batch_size,to_do,forward_outs)
 

@@ -84,7 +84,7 @@ def read_lab_fea_loader(fea_dict,lab_dict):
     return dataset_dict    
 
 
-class PyTorchKaldiDataset(Dataset):
+class PytorchKaldiDataset(Dataset):
     """
     """
 
@@ -108,6 +108,7 @@ class PyTorchKaldiDataset(Dataset):
             if colname in fea_dict and len(fea_dict[colname])==6: #TODO:HACK!
                 fea_dict[colname].insert(-1,dim_idx) # adding range (dim_idx,dim_idx+dim)
                 fea_dict[colname].insert(-1,dim_idx+dim)
+                fea_dict[colname][-1] = int(fea_dict[colname][-1])
             elif colname in lab_dict and len(lab_dict[colname])==3:
                 lab_dict[colname].append(dim_idx)
             dim_idx += dim
@@ -257,10 +258,10 @@ class PytorchKaldiDataLoader(DataLoader):
         # returns tensor compatible w/ forward_model 
         if self.mode=='forward':
             batch = pad_sequence(
-                [ torch.from_numpy(t) for t in batch_list ]
+                [ torch.from_numpy(t).float() for t in batch_list ]
             ).contiguous()
         else:
-            batch = torch.from_numpy(batch_list[0])
+            batch = torch.from_numpy(batch_list[0]).float()
         return batch
 
 """

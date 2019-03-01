@@ -8,7 +8,7 @@
 
 import configparser
 import numpy as np
-from dataloader import read_lab_fea_loader, PyTorchKaldiDataset
+from dataloader import read_lab_fea_loader, PyTorchKaldiDataset, FoldedChunkBatchSampler, PaddedBatchSampler, PytorchKaldiDataLoader
 from utils import dict_fea_lab_arch
 
 cfg = configparser.ConfigParser()
@@ -18,3 +18,10 @@ fea_dict, lab_dict, arch_dict = dict_fea_lab_arch(cfg)
 
 dataset = PyTorchKaldiDataset(fea_dict,lab_dict)
 #dataset_dict = read_lab_fea_loader(fea_dict,lab_dict)
+#train_sampler = FoldedChunkBatchSampler(dataset,16,40)
+#valid_sampler = FoldedChunkBatchSampler(dataset,16,40,False)
+#eval_sampler = EvalPaddedBatchSampler(dataset,16)
+
+dataloader_train = PytorchKaldiDataLoader(dataset,'train',16,40)
+dataloader_valid = PytorchKaldiDataLoader(dataset,'valid',16,40)
+dataloader_eval = PytorchKaldiDataLoader(dataset,'forward',16)

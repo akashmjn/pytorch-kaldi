@@ -6,6 +6,7 @@ import time, warnings
 import kaldi_io, pdb
 
 from torch.utils.data import Dataset, DataLoader, sampler
+from torch.nn.utils.rnn import pad_sequence
 from collections import OrderedDict
 from utils import compute_cw_max
 from data_io import read_lab_fea
@@ -82,25 +83,7 @@ def read_lab_fea_loader(fea_dict,lab_dict):
 
     return dataset_dict    
 
-"""
-Dataloader -> iterator of batches
-    - Dataset
-    - Sampler 
-    - collate_fn
 
-torch.utils.data.DataLoader(
-    dataset, batch_size=1, shuffle=False, sampler=None, batch_sampler=None, 
-    num_workers=0, collate_fn=<function default_collate>, pin_memory=False, 
-    drop_last=False, timeout=0, worker_init_fn=None
-    )
-
-<tensor>inp = next(Dataloader) # Should work w/ forward_model [:,f1 f2 lab]
-
-outs_dict = forward_model(
-    fea_dict,lab_dict,arch_dict,model,nns,costs,inp,inp_out_dict,
-    max_len,batch_size,to_do,forward_outs
-    )
-"""
 class PyTorchKaldiDataset(Dataset):
     """
     """
@@ -112,7 +95,26 @@ class PyTorchKaldiDataset(Dataset):
         self.features_dict = dataset_dict['features']
         self.labels_dict = dataset_dict['labels']
         self._sanity_check_data()
-        self._set_index()
+        self.set_index()
+        self._set_dims(fea_dict,lab_dict)
+    
+    def _set_dims(self,fea_dict,lab_dict):
+        self.dims, dim_idx = [], 0
+        for colname in self._index_colnames:
+            dim = self._get_colname_data(colname)[0].shape[-1]
+            self.dims.append(dim)
+            # update appropriate fields of fea and lab dict based on fields in the batch
+            # TODO: fix this at some point, model_init and forward_model have a dependency
+            if colname in fea_dict and len(fea_dict[colname])==6: #TODO:HACK!
+                fea_dict[colname].insert(-1,dim_idx) # adding range (dim_idx,dim_idx+dim)
+                fea_dict[colname].insert(-1,dim_idx+dim)
+            elif colname in lab_dict and len(lab_dict[colname])==3:
+                lab_dict[colname].append(dim_idx)
+            dim_idx += dim
+        self.batch_dim = sum(self.dims)
+
+    def _get_colname_data(self,colname):
+        return self.features_dict[colname] if colname in self.features_dict else self.labels_dict[colname]
 
     def _sanity_check_data(self):
         # TODO: Do some sanity checks b/w loaded features, labels
@@ -133,7 +135,7 @@ class PyTorchKaldiDataset(Dataset):
                             del fea_names2idx[missing_name]
                         warnings.warn("Feature:{} Removed {} missing names: {}".format(fea,len(missing_names),missing_names))
     
-    def _set_index(self,shuffle=True):
+    def set_index(self,shuffle=False):
         # use one fea as reference to create frame-aligned table of indexes, names
         fea_reference = [fea for fea in self.features_dict.keys() if 'vec' not in fea][0] #TODO:HACK
         _, utt_ids, fea_reference_names2idx = self.features_dict[fea_reference]
@@ -143,20 +145,24 @@ class PyTorchKaldiDataset(Dataset):
         if shuffle: np.random.shuffle(utt_ids)
          
         # fill index arrays with corresponding idx,name from dataset dicts 
-        index_list, index_names_list = [], []
+        index_list, index_names_list, nframes_list = [], [], [0]
         for utt_id in utt_ids:
             nframes = len(range(*fea_reference_names2idx[utt_id]))
             index_arr = np.empty((nframes,len(self._index_colnames)),dtype=int)
             index_names_arr = np.empty((nframes,len(self._index_colnames)),dtype=object)
             for j,colname in enumerate(self._index_colnames):
-                _, _, names2idx = self.features_dict[colname] if colname in self.features_dict \
-                    else self.labels_dict[colname]
+                _, _, names2idx = self._get_colname_data(colname)
                 # TODO: if some mapping for names provided use that, else
                 index_names_arr[:,j] = utt_id
                 index_arr[:,j] = range(*names2idx[utt_id])
             index_list.append(index_arr)
             index_names_list.append(index_names_arr)
+            nframes_list.append(nframes)
 
+        utt_index_ranges = np.cumsum(nframes_list)
+        self.utt2index = OrderedDict([ 
+            (uid,(utt_index_ranges[i],utt_index_ranges[i+1])) for i,uid in enumerate(utt_ids)
+            ])
         self.index = np.concatenate(index_list)
         self.index_names = np.concatenate(index_names_list)
     
@@ -167,43 +173,116 @@ class PyTorchKaldiDataset(Dataset):
         ## allow index to be N x batch size (for reading chunks)
         result = []
         for j,colname in enumerate(self._index_colnames):
-            array, _, _ = self.features_dict[colname] if colname in self.features_dict \
-                    else self.labels_dict[colname]
+            array, _, _ = self._get_colname_data(colname) 
             array_idx = self.index[:,j]
             array_idx = array_idx[idx]
             result.append(array[array_idx])
         return np.concatenate(result,axis=-1)
+    
+    def get_utt(self,utt_id):
+        return self[range(*self.utt2index[utt_id])]
 
 
 class FoldedChunkBatchSampler(sampler.Sampler):
     # Determines order in which loader reads samples from dataset 
-    # Random re-shuffling of utterance IDs 
     # Modify fea_dict w/ appropriate fea_indexes (probably do this in loader instead)
-    def __init__(self,max_seq_length):
-        pass
+    def __init__(self,dataset,batch_size,max_seq_length,shuffle=True):
+        self.dataset = dataset
+        self.dataset.set_index(shuffle=True) # Randomize order of utterances
+        self.batch_size = batch_size
+        self.max_seq_length = max_seq_length
+        self.batch_dim = self.dataset.batch_dim
+        # create array of indexes folded over by batch size  
+        nframes = len(self.dataset) - (len(self.dataset)%batch_size)
+        self.batch_indices = np.array(range(nframes))
+        self.batch_indices = self.batch_indices.reshape(self.batch_size,-1)\
+                                 .transpose((1,0))
+        self.N_batches = int(self.batch_indices.shape[0]/self.max_seq_length)#ignores last batch 
 
     def __iter__(self):
-        pass
+        # As a hack, returning list w/ one element as batching is already included in indices
+        for i in range(self.N_batches):
+            yield [self.batch_indices[i*self.max_seq_length:(i+1)*self.max_seq_length,:]]
     
     def __len__(self):
-        pass
+        return self.N_batches
 
-"""
+class PaddedBatchSampler(sampler.Sampler):
+    # iterate through utterances and create padded batches
+    def __init__(self,dataset,batch_size):
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.batch_dim = self.dataset.batch_dim
 
-class KaldiDataLoader(DataLoader):
+        N_utts = len(self.dataset.utt2index)
+        # last batch may have < batch_size utterances
+        self.N_batches = int(N_utts/self.batch_size) \
+            if N_utts%self.batch_size==0 else int(N_utts/self.batch_size)+1
+        utt_ids, _ = zip(*sorted(
+            list(dataset.utt2index.items()),key=lambda x: x[1][1]-x[1][0],reverse=True
+            )) # sorting dataset.utt2index in decreasing length for efficient padding 
+        self.utt_ids = [ utt_ids[i*batch_size:(i+1)*batch_size] for i in range(self.N_batches) ]
 
-    def __init__(self,**kwargs):
+    def __iter__(self):
+        for i in range(self.N_batches):
+            yield [ np.array(range(*self.dataset.utt2index[uid]))
+                      for uid in self.utt_ids[i] 
+                   ] 
+    
+    def __len__(self):
+        return self.N_batches
 
-        super(KaldiDataLoader, self).__init__(dataset,batch_size,sampler,collate_fn,num_workers)
+
+class PytorchKaldiDataLoader(DataLoader):
+
+    def __init__(self,dataset,mode,batch_size,max_seq_length=None,num_workers=0):
+
+        self.dataset = dataset 
+        assert mode in ["train","valid","forward"], "Invalid mode passed!"
+        self.mode = mode
+        if mode=='train':
+            self.batch_sampler = FoldedChunkBatchSampler(self.dataset,batch_size,max_seq_length)
+        elif mode=='valid':
+            self.batch_sampler = FoldedChunkBatchSampler(self.dataset,batch_size,max_seq_length,
+                           shuffle=False)
+        elif mode=='forward':
+            self.batch_sampler = PaddedBatchSampler(self.dataset,batch_size)
+
+        super(PytorchKaldiDataLoader, self).__init__(
+            dataset=self.dataset,batch_sampler=self.batch_sampler,collate_fn=self.collate_fn,
+            num_workers=num_workers,pin_memory=True
+            )
     
     def collate_fn(self,batch_list):
-
         # returns tensor compatible w/ forward_model 
-        pass
+        if self.mode=='forward':
+            batch = pad_sequence(
+                [ torch.from_numpy(t) for t in batch_list ]
+            ).contiguous()
+        else:
+            batch = torch.from_numpy(batch_list[0])
+        return batch
+
+"""
+Dataloader -> iterator of batches
+    - Dataset
+    - Sampler 
+    - collate_fn
+
+torch.utils.data.DataLoader(
+    dataset, batch_size=1, shuffle=False, sampler=None, batch_sampler=None, 
+    num_workers=0, collate_fn=<function default_collate>, pin_memory=False, 
+    drop_last=False, timeout=0, worker_init_fn=None
+    )
+
+<tensor>inp = next(Dataloader) # Should work w/ forward_model [:,f1 f2 lab]
+
+outs_dict = forward_model(
+    fea_dict,lab_dict,arch_dict,model,nns,costs,inp,inp_out_dict,
+    max_len,batch_size,to_do,forward_outs
+    )
 
 ------- Rough code --------------
-        # create / store some book keeping 
-        self.spk_embeds = nn.Embedding.from_pretrained(read_spk_ids) 
 
         # Randomize if the model is not sequential
         if to_do!='forward':

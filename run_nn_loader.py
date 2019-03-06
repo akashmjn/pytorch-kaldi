@@ -71,8 +71,8 @@ dataset = PytorchKaldiDataset(fea_dict,lab_dict)
 
 if to_do=='train':
     max_seq_length=int(config['batches']['max_seq_length_train']) #*(int(info_file[-13:-10])+1) # increasing over the epochs
-    if epoch_num >= 11: max_seq_len = 60
-    if epoch_num >= 15: max_seq_len = 80
+    if epoch_num >= 11: max_seq_length = 60
+    if epoch_num >= 15: max_seq_length = 80
     batch_size=int(config['batches']['batch_size_train'])
     dataloader = PytorchKaldiDataLoader(dataset,to_do,batch_size,max_seq_length)
 

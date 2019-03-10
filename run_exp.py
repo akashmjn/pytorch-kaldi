@@ -168,15 +168,55 @@ for ep in range(N_ep):
             #     for pt_arch in pt_files.keys():
             #         if os.path.exists(model_files_past[pt_arch]):
             #             os.remove(model_files_past[pt_arch]) 
-    
-    
-        # Training Loss and Error    
-        tr_info_lst=sorted(glob.glob(out_folder+'/exp_files/train_'+tr_data+'_ep'+format(ep, "03d")+'*.info'))
-        [tr_loss,tr_error,tr_time]=compute_avg_performance(tr_info_lst)
+
+            # Training Loss and Error    
+            tr_info_lst=sorted(glob.glob(out_folder+'/exp_files/train_'+tr_data+'_ep'+format(ep, "03d")+'*.info'))
+            [tr_loss,tr_error,tr_time]=compute_avg_performance(tr_info_lst)
+            
+            tr_loss_tot=tr_loss_tot+tr_loss
+            tr_error_tot=tr_error_tot+tr_error
+            tr_time_tot=tr_time_tot+tr_time
+   
+            tot_time=tr_time  
+            valid_peformance_dict={}  
+            # Run validation every chunk
+            for valid_data in valid_data_lst:
+                
+                # Compute the number of chunks for each validation dataset
+                N_ck_valid=compute_n_chunks(out_folder,valid_data,ep,'valid')
+                ck_tr = ck 
+            
+                for ck in range(N_ck_valid):
+                    
+                    # path of the list of features for this chunk
+                    lst_file=out_folder+'/exp_files/valid_'+valid_data+'_ep'+format(ep, "03d")+'_ck'+format(ck_tr, "02d")+'_*.lst'
+                    
+                    # paths of the output files
+                    info_file=out_folder+'/exp_files/valid_'+valid_data+'_ep'+format(ep, "03d")+'_ck'+format(ck_tr, "02d")+'.info'            
+                    config_chunk_file=out_folder+'/exp_files/valid_'+valid_data+'_ep'+format(ep, "03d")+'_ck'+format(ck, "02d")+'.cfg'
+                    
+                    # Write chunk-specific cfg file
+                    write_cfg_chunk(cfg_file,config_chunk_file,cfg_file_proto_chunk,model_files,lst_file,info_file,'valid',valid_data,lr,max_seq_length_train_curr,name_data,ep,ck)
         
-        tr_loss_tot=tr_loss_tot+tr_loss
-        tr_error_tot=tr_error_tot+tr_error
-        tr_time_tot=tr_time_tot+tr_time
+                    # Do validation if the chunk was not already processed
+                    if not(os.path.exists(info_file)):
+                        print('Validating %s chunk = %i / %i' %(valid_data,ck+1,N_ck_valid))
+                            
+                        # Doing eval
+                        cmd_chunk=cmd+'python ' + run_nn_script + ' ' + config_chunk_file + ' 2> ' + log_file
+                        run_shell_display(cmd_chunk)
+                        
+                        if not(os.path.exists(info_file)):
+                            sys.stderr.write("ERROR: validation on epoch %i, chunk %i of dataset %s not done! File %s does not exist.\nSee %s \n" % (ep,ck,valid_data,info_file,log_file))
+                            sys.exit(0)
+                
+                # Compute validation performance  
+                valid_info_lst=sorted(glob.glob(out_folder+'/exp_files/valid_'+valid_data+'_ep'+format(ep, "03d")+'*.info'))
+                [valid_loss,valid_error,valid_time]=compute_avg_performance(valid_info_lst)
+                valid_peformance_dict[valid_data]=[valid_loss,valid_error,valid_time]
+                tot_time=tot_time+valid_time
+
+
         
         
         # ***Epoch validation***
@@ -184,46 +224,7 @@ for ep in range(N_ep):
             # store previous-epoch results (useful for learnig rate anealling)
             valid_peformance_dict_prev=valid_peformance_dict
         
-        valid_peformance_dict={}  
-        tot_time=tr_time  
-    
-    
-    for valid_data in valid_data_lst:
-        
-        # Compute the number of chunks for each validation dataset
-        N_ck_valid=compute_n_chunks(out_folder,valid_data,ep,'valid')
-
-    
-        for ck in range(N_ck_valid):
-            
-            # path of the list of features for this chunk
-            lst_file=out_folder+'/exp_files/valid_'+valid_data+'_ep'+format(ep, "03d")+'_ck'+format(ck, "02d")+'_*.lst'
-            
-            # paths of the output files
-            info_file=out_folder+'/exp_files/valid_'+valid_data+'_ep'+format(ep, "03d")+'_ck'+format(ck, "02d")+'.info'            
-            config_chunk_file=out_folder+'/exp_files/valid_'+valid_data+'_ep'+format(ep, "03d")+'_ck'+format(ck, "02d")+'.cfg'
-            
-            # Write chunk-specific cfg file
-            write_cfg_chunk(cfg_file,config_chunk_file,cfg_file_proto_chunk,model_files,lst_file,info_file,'valid',valid_data,lr,max_seq_length_train_curr,name_data,ep,ck)
-
-            # Do validation if the chunk was not already processed
-            if not(os.path.exists(info_file)):
-                print('Validating %s chunk = %i / %i' %(valid_data,ck+1,N_ck_valid))
-                    
-                # Doing eval
-                cmd_chunk=cmd+'python ' + run_nn_script + ' ' + config_chunk_file + ' 2> ' + log_file
-                run_shell_display(cmd_chunk)
-                
-                if not(os.path.exists(info_file)):
-                    sys.stderr.write("ERROR: validation on epoch %i, chunk %i of dataset %s not done! File %s does not exist.\nSee %s \n" % (ep,ck,valid_data,info_file,log_file))
-                    sys.exit(0)
-        
-        # Compute validation performance  
-        valid_info_lst=sorted(glob.glob(out_folder+'/exp_files/valid_'+valid_data+'_ep'+format(ep, "03d")+'*.info'))
-        [valid_loss,valid_error,valid_time]=compute_avg_performance(valid_info_lst)
-        valid_peformance_dict[valid_data]=[valid_loss,valid_error,valid_time]
-        tot_time=tot_time+valid_time
-       
+              
         
     # Print results in both res_file and stdout
     dump_epoch_results(res_file_path, ep, tr_data_lst, tr_loss_tot, tr_error_tot, tot_time, valid_data_lst, valid_peformance_dict, lr, N_ep)

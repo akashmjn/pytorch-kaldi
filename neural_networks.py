@@ -159,19 +159,18 @@ class AffineTransformDeep(nn.Module):
         if self.aux_dim < self.fea_dim/4:
             raise Warning("Auxillary dimension {} much smaller than fea dim {}. Check if something wrong".format(self.aux_dim,self.fea_dim))
         self.out_dim=self.input_dim
-        self.dropout=float(options['dropout'])
-        self.dnn_act=options['dnn_act'].strip()
+        self.act=options['act'].strip()
         # create module lists
-        self.wx = nn.ModuleList([
-            nn.Dropout(p=self.dropout)()
-            nn.Linear(self.input_dim, self.fea_dim,bias=True)
-            ])
-        self.act = nn.ModuleList([])
-        self.drop = nn.ModuleList([])
+        self.wx = nn.Sequential(
+            nn.Linear(self.aux_dim, self.fea_dim,bias=True),
+            act_fun(self.act)
+        )
     
     def forward(self,x):
-
-
+        fea, aux = x[...,:self.fea_dim], x[...,self.fea_dim:]
+        self.gamma = self.wx(aux)
+        x = torch.cat([torch.mul(fea,self.gamma),aux],-1)
+        return x
 
 class LSTM_cudnn(nn.Module):
     

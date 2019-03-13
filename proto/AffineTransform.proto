@@ -1,4 +1,3 @@
 [proto]
 fea_dim=int
-dropout=float
-dnn_act=str
+act=str

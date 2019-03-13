@@ -18,6 +18,7 @@ import time
 from scipy.ndimage.interpolation import shift
 import kaldi_io
 from torch.nn.utils.rnn import pad_sequence
+from dataloader import PytorchKaldiDataset, PytorchKaldiDataLoader
 
 
 # Reading chunk-specific cfg file (first argument-mandatory file) 
@@ -40,13 +41,11 @@ else:
 # check automatically if the model is sequential
 seq_model=is_sequential_dict(config,arch_dict)
 
-
 # Setting torch seed
 seed=int(config['exp']['seed'])
 torch.manual_seed(seed)
 random.seed(seed)
 np.random.seed(seed)
-
 
 # Reading config parameters
 use_cuda=strtobool(config['exp']['use_cuda'])
@@ -64,49 +63,38 @@ forward_normalize_post=list(map(strtobool,config['forward']['normalize_posterior
 forward_count_files=config['forward']['normalize_with_counts_from'].split(',')
 require_decodings=list(map(strtobool,config['forward']['require_decoding'].split(',')))
 
+epoch_num = int(os.path.basename(cfg_file).split('_')[-2][2:])
+
+start_time = time.time()
+
+dataset = PytorchKaldiDataset(fea_dict,lab_dict)
+
 if to_do=='train':
     max_seq_length=int(config['batches']['max_seq_length_train']) #*(int(info_file[-13:-10])+1) # increasing over the epochs
+    if epoch_num >= 11: max_seq_length = 60
+    if epoch_num >= 15: max_seq_length = 80
     batch_size=int(config['batches']['batch_size_train'])
+    dataloader = PytorchKaldiDataLoader(dataset,to_do,batch_size,max_seq_length)
 
 if to_do=='valid':
     max_seq_length=int(config['batches']['max_seq_length_valid'])
     batch_size=int(config['batches']['batch_size_valid'])
+    dataloader = PytorchKaldiDataLoader(dataset,to_do,batch_size,max_seq_length)
 
 if to_do=='forward':
     max_seq_length=-1 # do to break forward sentences
     batch_size=64
-    
-    
-start_time = time.time()
-
-# Compute the maximum context window in the feature dict
-[cw_left_max,cw_right_max]=compute_cw_max(fea_dict)
-
-# Reading all the features and labels
-[data_name,data_set,data_end_index]=read_lab_fea(fea_dict,lab_dict,cw_left_max,cw_right_max,max_seq_length)
-
-# Randomize if the model is not sequential
-if to_do!='forward':
-    if not(seq_model):
-        np.random.shuffle(data_set)
-    else:
-        # fold long series of utterances into batch_size num of sequences 
-        nframes_rounded, ndim = data_set.shape[0] - (data_set.shape[0]%batch_size), data_set.shape[1]
-        data_set = data_set[:nframes_rounded,:]
-        data_set = data_set.reshape((batch_size,-1,ndim)).transpose((1,0,2))
-        print("Reshaped chunk of {} frames to {}".format(nframes_rounded,str(data_set.shape)))
-if seq_model and to_do!='forward': inp_dim=data_set.shape[2]
-else: inp_dim=data_set.shape[1] # TODO: doesn't pass labels to dnn. see forward_model
-
+    dataloader = PytorchKaldiDataLoader(dataset,to_do,batch_size)
 
 elapsed_time_reading=time.time() - start_time 
 
 # converting numpy tensors into pytorch tensors and put them on GPUs if specified
 start_time = time.time()
-if not(save_gpumem) and use_cuda:
-   data_set=torch.from_numpy(data_set).float().cuda()
-else:
-   data_set=torch.from_numpy(data_set).float() 
+
+# if not(save_gpumem) and use_cuda:
+#    data_set=torch.from_numpy(data_set).float().cuda()
+# else:
+#    data_set=torch.from_numpy(data_set).float() 
    
 elapsed_time_load=time.time() - start_time 
 
@@ -118,7 +106,6 @@ inp_out_dict=fea_dict
    
 # optimizers initialization
 optimizers=optimizer_init(nns,config,arch_dict)
-       
 
 # pre-training
 for net in nns.keys():
@@ -129,9 +116,6 @@ for net in nns.keys():
       nns[net].load_state_dict(checkpoint_load['model_par'])
       optimizers[net].load_state_dict(checkpoint_load['optimizer_par'])
       optimizers[net].param_groups[0]['lr']=float(config[arch_dict[net][0]]['arch_lr']) # loading lr of the cfg file for pt
-      
-
-
 
 if to_do=='forward':
     
@@ -144,79 +128,15 @@ if to_do=='forward':
         post_file[forward_outs[out_id]]=kaldi_io.open_or_fd(out_file,'wb')
 
 
-# ***** Minibatch Processing loop********
-N_snt=len(data_name)
-if to_do=='forward':
-    N_batches=int(N_snt/batch_size) if N_snt%batch_size==0 else int(N_snt/batch_size)+1
-    snt_lookup=[] # indexing into data_set via [ (snt_name,(start_idx,end_idx)) ]
-    for i in range(N_snt): 
-        if i==0: snt_lookup.append((data_name[i],(0,data_end_index[i]))) 
-        else: snt_lookup.append((data_name[i],(data_end_index[i-1],data_end_index[i])))
-    snt_lookup.sort(key=lambda x: x[1][1]-x[1][0],reverse=True) # sort in decreasing length
-elif seq_model:
-    N_batches=int(data_set.shape[0]/max_seq_length) # TODO: ignores the last batch that's < max_seq_length
-else:
-    N_batches=int(data_set.shape[0]/batch_size)
-    
-
-beg_batch=0
-end_batch=batch_size 
-
-snt_index=0
-beg_snt=0 
-
-
 start_time = time.time()
-
-
 
 loss_sum=0
 err_sum=0
+N_batches = dataloader.batch_sampler.N_batches
 
-for i in range(N_batches):   
+for i, inp in enumerate(dataloader):   
     
-    max_len=0
-
-    if seq_model:
-        if to_do=='forward':
-            batch_size = min(batch_size,N_snt-beg_batch) # for remainder if N_snt%batch_size!=0 
-            # create batch of sentences from lookup (snt_name,(start_idx,end_idx)) 
-            inp = pad_sequence(
-                [ data_set[name_idx_tup[1][0]:name_idx_tup[1][1],:] \
-                    for name_idx_tup in snt_lookup[beg_batch:beg_batch+batch_size] ]
-            ).contiguous()
-            max_len = inp.shape[0]
-        else:
-            max_len = max_seq_length
-            inp = data_set[beg_snt:beg_snt+max_len,:,:].contiguous()
-            beg_snt += max_len
-    #  max_len=int(max(arr_snt_len[snt_index:snt_index+batch_size]))  
-    #  inp= torch.zeros(max_len,batch_size,inp_dim).contiguous()
-
-        
-    #  for k in range(batch_size):
-          
-    #           snt_len=data_end_index[snt_index]-beg_snt
-    #           N_zeros=max_len-snt_len
-              
-    #           # Appending a random number of initial zeros, tge others are at the end. 
-    #           N_zeros_left=random.randint(0,N_zeros)
-             
-    #           # randomizing could have a regularization effect
-    #           inp[N_zeros_left:N_zeros_left+snt_len,k,:]=data_set[beg_snt:beg_snt+snt_len,:]
-              
-    #           beg_snt=data_end_index[snt_index]
-    #           snt_index=snt_index+1
-            
-    else:
-        # features and labels for batch i
-        if to_do!='forward': # TODO(akash) support batched forward for non-seq models
-            inp= data_set[beg_batch:end_batch,:].contiguous()
-        else:
-            snt_len=data_end_index[snt_index]-beg_snt
-            inp= data_set[beg_snt:beg_snt+snt_len,:].contiguous()
-            beg_snt=data_end_index[snt_index]
-            snt_index=snt_index+1
+    max_len = inp.shape[0]
 
     # use cuda
     if use_cuda:
@@ -228,10 +148,7 @@ for i in range(N_batches):
         
         for opt in optimizers.keys():
             optimizers[opt].zero_grad()
-            
-
         outs_dict['loss_final'].backward()
-        
         # Gradient Clipping (th 0.5)
         grad_max_norm, grad_med_norm, grad_clip_norm = 0.0, np.inf, 0.5
         for net in nns.keys():
@@ -247,30 +164,32 @@ for i in range(N_batches):
             if not(strtobool(config[arch_dict[opt][0]]['arch_freeze'])):
                 optimizers[opt].step()
     else:
+        batch_size = inp.shape[1]
         with torch.no_grad(): # Forward input without autograd graph (save memory)
             outs_dict=forward_model(fea_dict,lab_dict,arch_dict,model,nns,costs,inp,inp_out_dict,max_len,batch_size,to_do,forward_outs)
 
-                
     if to_do=='forward':
         if not seq_model: # TODO(akash) implement batched forward for non-seq models
             raise Exception("Batched forward not implemented for non-seq models yet")
+        # get number of frames for each utt in batch
+        utt_ids = dataloader.batch_sampler.utt_ids[i]
+        nframes = [dataset.get_utt(uid).shape[0] for uid in utt_ids]
         
-        # do for each batch, save only unpadded part  
+        # save only unpadded part for each utt in batch
         for out_id in range(len(forward_outs)):
             out_save=outs_dict[forward_outs[out_id]].data.cpu().numpy()
             out_dim=out_save.shape[-1]
             out_save=out_save.reshape(-1,batch_size,out_dim)
-            for k, name_idx_tup in enumerate(snt_lookup[beg_batch:beg_batch+batch_size]):
+            for j, out_save_j_len in enumerate(nframes):
                 # save kth utterance in batch - truncate padding to original len 
-                out_save_k_len = name_idx_tup[1][1]-name_idx_tup[1][0]
-                out_save_k = out_save[:out_save_k_len,k,:]
+                out_save_j = out_save[:out_save_j_len,j,:]
                 if forward_normalize_post[out_id]:
                     # read the config file
                     counts = load_counts(forward_count_files[out_id])
-                    out_save_k=out_save_k-np.log(counts/np.sum(counts))             
+                    out_save_j=out_save_j-np.log(counts/np.sum(counts))             
                     
                 # save the output    
-                kaldi_io.write_mat(post_file[forward_outs[out_id]], out_save_k, name_idx_tup[0])
+                kaldi_io.write_mat(post_file[forward_outs[out_id]], out_save_j, utt_ids[j])
     else:
         # for printing instantaneous values
         batch_loss = round(outs_dict['loss_final'].item(),3)
@@ -278,10 +197,6 @@ for i in range(N_batches):
         loss_sum += batch_loss
         err_sum += batch_err
        
-    # update it to the next batch 
-    beg_batch=end_batch
-    end_batch=beg_batch+batch_size
-    
     # Progress bar
     if to_do == 'train':
         status_string="Training |L:{}, Err:{}, Gmax/med:{}/{}|Len:{}| (Batch {}/{})".format(batch_loss,batch_err,
@@ -299,25 +214,20 @@ loss_tot=loss_sum/N_batches
 err_tot=err_sum/N_batches
 
 # clearing memory
-del inp, outs_dict, data_set
+del inp, outs_dict
 
 # save the model
 if to_do=='train':
- 
-
      for net in nns.keys():
          checkpoint={}
          checkpoint['model_par']=nns[net].state_dict()
          checkpoint['optimizer_par']=optimizers[net].state_dict()
-         
          out_file=info_file.replace('.info','_'+arch_dict[net][0]+'.pkl')
          torch.save(checkpoint, out_file)
      
 if to_do=='forward':
     for out_name in forward_outs:
         post_file[out_name].close()
-     
-
      
 # Write info file
 with open(info_file, "w") as text_file:

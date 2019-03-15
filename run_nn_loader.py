@@ -84,7 +84,8 @@ if to_do=='valid':
 if to_do=='forward':
     max_seq_length=-1 # do to break forward sentences
     batch_size=64
-    dataloader = PytorchKaldiDataLoader(dataset,to_do,batch_size)
+    info_csv = "./kaldi_data_dir/data/ihm/eval_hires/info.csv"
+    dataloader = PytorchKaldiDataLoader(dataset,to_do+"_spk_chunk",batch_size,info_csv=info_csv)
 
 elapsed_time_reading=time.time() - start_time 
 

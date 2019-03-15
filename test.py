@@ -23,16 +23,17 @@ def test_dataloader():
     #train_sampler = FoldedChunkBatchSampler(dataset,16,40)
     #valid_sampler = FoldedChunkBatchSampler(dataset,16,40,False)
     #eval_sampler = EvalPaddedBatchSampler(dataset,16)
-    eval_spk_chunk_sampler = SpeakerChunkSampler(dataset,"./test/info.csv",16)
-    eval_mtg_chunk_sampler = MeetingChunkSampler(dataset,"./test/info.csv",16)
+    # eval_spk_chunk_sampler = SpeakerChunkSampler(dataset,"./test/info.csv",16)
+    # eval_mtg_chunk_sampler = MeetingChunkSampler(dataset,"./test/info.csv",16)
 
     dataloader_train = PytorchKaldiDataLoader(dataset,'train',16,40)
     dataloader_valid = PytorchKaldiDataLoader(dataset,'valid',16,40)
-    dataloader_eval = PytorchKaldiDataLoader(dataset,'forward',16)
+    dataloader_eval_spk_chunk = PytorchKaldiDataLoader(dataset,'forward_spk_chunk',16,info_csv="./test/info.csv")
+    dataloader_eval_mtg_chunk = PytorchKaldiDataLoader(dataset,'forward_mtg_chunk',16,info_csv="./test/info.csv")
 
-    return dataloader_train, dataloader_valid, dataloader_eval, eval_spk_chunk_sampler, eval_mtg_chunk_sampler 
+    return dataloader_train, dataloader_valid, dataloader_eval_spk_chunk, dataloader_eval_mtg_chunk  
 
-dl_train, dl_valid, dl_eval, eval_spk_chunk_sampler, eval_mtg_chunk_sampler = test_dataloader()
+dl_train, dl_valid, dl_eval_spk_chunk, dl_eval_mtg_chunk = test_dataloader()
 options = {'fea_dim':3,'act':'linear'}
 A1 = AffineTransformDeep(options,5)
 x = torch.randn(4,5)

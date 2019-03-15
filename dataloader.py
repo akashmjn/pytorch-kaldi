@@ -253,21 +253,21 @@ class PaddedBatchSampler(sampler.Sampler):
             list(dataset.utt2index.items()),key=lambda x: x[1][1]-x[1][0],reverse=True
             )) # sorting dataset.utt2index in decreasing length for efficient padding 
         self.utt_ids = [ utt_ids[i*batch_size:(i+1)*batch_size] for i in range(self.N_batches) ]
-        self._last_batch_nframes = []
+        self._last_batch_info = None
 
     def __iter__(self):
         for i in range(self.N_batches):
             batch_idx_list = [ np.array(range(*self.dataset.utt2index[uid]))
                       for uid in self.utt_ids[i] 
                    ] 
-            self._last_batch_nframes = [ i.shape[0] for i in batch_idx_list ]
+            self._last_batch_info = (self.utt_ids[i],[i.shape[0] for i in batch_idx_list])
             yield batch_idx_list
     
     def __len__(self):
         return self.N_batches
     
-    def get_last_batch_nframes(self):
-        return self._last_batch_nframes
+    def get_last_batch_info(self):
+        return self._last_batch_info
 
 
 class SpeakerChunkSampler(sampler.Sampler):
@@ -277,38 +277,37 @@ class SpeakerChunkSampler(sampler.Sampler):
         self.dataset = dataset
         self.batch_size = batch_size
         self._info_df = pd.read_csv(info_csv).sort_values('mtg_utt_ids')
-        # Maintain spk_chunk_utt_ids = [ [uttid,...] ] 
-        spk_chunk_utt_ids = self._info_df.groupby('spk_chunk_ids').utt_ids.apply(list)
-        _spk_chunk_durations = self._info_df.groupby('spk_chunk_ids').sum().duration_s
+        # Maintain spk_chunk_info = [ [uttid,...] ] 
+        s1 = self._info_df.groupby('spk_chunk_ids').utt_ids.apply(list)
+        s2 = self._info_df.groupby('spk_chunk_ids').sum().duration_s
         # sort in decreasing order of length for padding efficiency
-        self.spk_chunk_utt_ids = [
-            x for _,x in sorted(zip(_spk_chunk_durations,spk_chunk_utt_ids),reverse=True)
-            ]
-        N_chunks = len(self.spk_chunk_utt_ids)
+        self.spk_chunk_info = pd.concat([s1,s2],axis=1).sort_values('duration_s',ascending=False)
+        N_chunks = len(self.spk_chunk_info)
         # last batch may have < batch_size chunks 
         self.N_batches = int(N_chunks/self.batch_size) \
             if N_chunks%self.batch_size==0 else int(N_chunks/self.batch_size)+1
-        self._last_batch_nframes = []
+        self._last_batch_info = None
     
     def __iter__(self):
         for i in range(self.N_batches):
             # batch chunks has form [ [uttid,...] ]
-            batch_chunks = self.spk_chunk_utt_ids[i*self.batch_size:(i+1)*self.batch_size]
+            batch_info = self.spk_chunk_info.iloc[i*self.batch_size:(i+1)*self.batch_size]
+            batch_chunk_uids = batch_info.utt_ids.apply(list) 
             # For each uttid in spk_chunk_id, concat(utt2index[uttid])
             # TODO: uid may not be present in utt2index 
             batch_idx_list = [
                 np.concatenate([ np.array(range(*self.dataset.utt2index[uid])) 
                                 for uid in chunk_uids if uid in self.dataset.utt2index]) 
-                for chunk_uids in batch_chunks
+                for chunk_uids in batch_chunk_uids
             ]
-            self._last_batch_nframes = [ i.shape[0] for i in batch_idx_list ]
+            self._last_batch_info = (list(batch_info.index),[i.shape[0] for i in batch_idx_list])
             yield batch_idx_list
     
     def __len__(self):
         return self.N_batches
 
-    def get_last_batch_nframes(self):
-        return self._last_batch_nframes
+    def get_last_batch_info(self):
+        return self._last_batch_info
 
 
 class MeetingChunkSampler(sampler.Sampler):
@@ -318,38 +317,37 @@ class MeetingChunkSampler(sampler.Sampler):
         self.dataset = dataset
         self.batch_size = batch_size
         self._info_df = pd.read_csv(info_csv).sort_values('mtg_utt_ids')
-        # Maintain mtg_chunk_utt_ids = [ [uttid,...] ] 
-        mtg_chunk_utt_ids = self._info_df.groupby('mtg_chunk_ids').utt_ids.apply(list)
-        _mtg_chunk_durations = self._info_df.groupby('mtg_chunk_ids').sum().duration_s
+        # Maintain mtg_chunk_info = [ [uttid,...] ] 
+        s1 = self._info_df.groupby('mtg_chunk_ids').utt_ids.apply(list)
+        s2 = self._info_df.groupby('mtg_chunk_ids').sum().duration_s
         # sort in decreasing order of length for padding efficiency
-        self.mtg_chunk_utt_ids = [
-            x for _,x in sorted(zip(_mtg_chunk_durations,mtg_chunk_utt_ids),reverse=True)
-            ]
-        N_chunks = len(self.mtg_chunk_utt_ids)
+        self.mtg_chunk_info = pd.concat([s1,s2],axis=1).sort_values('duration_s',ascending=False)
+        N_chunks = len(self.mtg_chunk_info)
         # last batch may have < batch_size chunks 
         self.N_batches = int(N_chunks/self.batch_size) \
             if N_chunks%self.batch_size==0 else int(N_chunks/self.batch_size)+1
-        self._last_batch_nframes = []
+        self._last_batch_info = None
    
     def __iter__(self):
         for i in range(self.N_batches):
             # batch chunks has form [ [uttid,...] ]
-            batch_chunks = self.mtg_chunk_utt_ids[i*self.batch_size:(i+1)*self.batch_size]
+            batch_info = self.mtg_chunk_info.iloc[i*self.batch_size:(i+1)*self.batch_size]
+            batch_chunk_uids = batch_info.utt_ids.apply(list) 
             # For each uttid in mtg_chunk_id, concat(utt2index[uttid])
             # TODO: uid may not be present in utt2index 
             batch_idx_list = [
                 np.concatenate([ np.array(range(*self.dataset.utt2index[uid])) 
                                 for uid in chunk_uids if uid in self.dataset.utt2index]) 
-                for chunk_uids in batch_chunks
+                for chunk_uids in batch_chunk_uids
             ]
-            self._last_batch_nframes = [ i.shape[0] for i in batch_idx_list ]
+            self._last_batch_info = (list(batch_info.index),[i.shape[0] for i in batch_idx_list])
             yield batch_idx_list 
     
     def __len__(self):
         return self.N_batches
 
-    def get_last_batch_nframes(self):
-        return self._last_batch_nframes
+    def get_last_batch_info(self):
+        return self._last_batch_info
 
 
 class PytorchKaldiDataLoader(DataLoader):

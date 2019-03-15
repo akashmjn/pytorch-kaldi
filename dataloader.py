@@ -203,7 +203,8 @@ class FoldedChunkBatchSampler(sampler.Sampler):
     Dataset[batch] yields a (seq_len,batch_size,d) array. 
     Returns list with one element as a hack as a list is required by DataLoader 
 
-    Internally maintains self.batch_indices: (nslices,batch_size) folded array of frame indexes 
+    Internally maintains:
+    self.batch_indices: (nslices,batch_size) folded array of frame indexes 
     into the dataset. nsclices=len(Dataset)//batch_size. Iterates by progressing along axis 0 
     in steps of max_seq_length. 
     """
@@ -234,7 +235,8 @@ class PaddedBatchSampler(sampler.Sampler):
     Yields iterator of len batch_size, each element = list[(S_i,) int array] to access dataset. 
     Each Dataset[elem] yields a (S_i,d) array. These are padded into a batch by the DataLoader.
 
-    Internally maintains self.utt_ids: list[ list[ uttid_i ] ] - each element is a list of uttids
+    Internally maintains:
+    self.utt_ids: list[ list[ uttid_i ] ] - each element is a list of uttids
     contained in the batch. Uses dataset.utt2index to convert this to corresponding frame indexes.
     """
     # iterate through utterances and create padded batches
@@ -251,15 +253,21 @@ class PaddedBatchSampler(sampler.Sampler):
             list(dataset.utt2index.items()),key=lambda x: x[1][1]-x[1][0],reverse=True
             )) # sorting dataset.utt2index in decreasing length for efficient padding 
         self.utt_ids = [ utt_ids[i*batch_size:(i+1)*batch_size] for i in range(self.N_batches) ]
+        self._last_batch_nframes = []
 
     def __iter__(self):
         for i in range(self.N_batches):
-            yield [ np.array(range(*self.dataset.utt2index[uid]))
+            batch_idx_list = [ np.array(range(*self.dataset.utt2index[uid]))
                       for uid in self.utt_ids[i] 
                    ] 
+            self._last_batch_nframes = [ i.shape[0] for i in batch_idx_list ]
+            yield batch_idx_list
     
     def __len__(self):
         return self.N_batches
+    
+    def get_last_batch_nframes(self):
+        return self._last_batch_nframes
 
 
 class SpeakerChunkSampler(sampler.Sampler):
@@ -280,6 +288,7 @@ class SpeakerChunkSampler(sampler.Sampler):
         # last batch may have < batch_size chunks 
         self.N_batches = int(N_chunks/self.batch_size) \
             if N_chunks%self.batch_size==0 else int(N_chunks/self.batch_size)+1
+        self._last_batch_nframes = []
     
     def __iter__(self):
         for i in range(self.N_batches):
@@ -287,14 +296,19 @@ class SpeakerChunkSampler(sampler.Sampler):
             batch_chunks = self.spk_chunk_utt_ids[i*self.batch_size:(i+1)*self.batch_size]
             # For each uttid in spk_chunk_id, concat(utt2index[uttid])
             # TODO: uid may not be present in utt2index 
-            yield [
+            batch_idx_list = [
                 np.concatenate([ np.array(range(*self.dataset.utt2index[uid])) 
                                 for uid in chunk_uids if uid in self.dataset.utt2index]) 
                 for chunk_uids in batch_chunks
             ]
+            self._last_batch_nframes = [ i.shape[0] for i in batch_idx_list ]
+            yield batch_idx_list
     
     def __len__(self):
         return self.N_batches
+
+    def get_last_batch_nframes(self):
+        return self._last_batch_nframes
 
 
 class MeetingChunkSampler(sampler.Sampler):
@@ -315,6 +329,7 @@ class MeetingChunkSampler(sampler.Sampler):
         # last batch may have < batch_size chunks 
         self.N_batches = int(N_chunks/self.batch_size) \
             if N_chunks%self.batch_size==0 else int(N_chunks/self.batch_size)+1
+        self._last_batch_nframes = []
    
     def __iter__(self):
         for i in range(self.N_batches):
@@ -322,14 +337,19 @@ class MeetingChunkSampler(sampler.Sampler):
             batch_chunks = self.mtg_chunk_utt_ids[i*self.batch_size:(i+1)*self.batch_size]
             # For each uttid in mtg_chunk_id, concat(utt2index[uttid])
             # TODO: uid may not be present in utt2index 
-            yield [
+            batch_idx_list = [
                 np.concatenate([ np.array(range(*self.dataset.utt2index[uid])) 
                                 for uid in chunk_uids if uid in self.dataset.utt2index]) 
                 for chunk_uids in batch_chunks
             ]
+            self._last_batch_nframes = [ i.shape[0] for i in batch_idx_list ]
+            yield batch_idx_list 
     
     def __len__(self):
         return self.N_batches
+
+    def get_last_batch_nframes(self):
+        return self._last_batch_nframes
 
 
 class PytorchKaldiDataLoader(DataLoader):

@@ -173,8 +173,7 @@ for i, inp in enumerate(dataloader):
         if not seq_model: # TODO(akash) implement batched forward for non-seq models
             raise Exception("Batched forward not implemented for non-seq models yet")
         # get number of frames for each utt in batch
-        utt_ids = dataloader.batch_sampler.utt_ids[i]
-        nframes = [dataset.get_utt(uid).shape[0] for uid in utt_ids]
+        nframes = dataloader.batch_sampler.get_last_batch_nframes()
         
         # save only unpadded part for each utt in batch
         for out_id in range(len(forward_outs)):

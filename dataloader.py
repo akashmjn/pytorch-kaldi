@@ -334,10 +334,10 @@ class MeetingChunkSampler(sampler.Sampler):
 
 class PytorchKaldiDataLoader(DataLoader):
 
-    def __init__(self,dataset,mode,batch_size,max_seq_length=None,num_workers=0):
+    def __init__(self,dataset,mode,batch_size,max_seq_length=None,info_csv=None,num_workers=0):
 
         self.dataset = dataset 
-        assert mode in ["train","valid","forward"], "Invalid mode passed!"
+        assert mode in ["train","valid","forward","forward_spk_chunk","forward_mtg_chunk"], "Invalid mode passed!"
         self.mode = mode
         if mode=='train':
             self.batch_sampler = FoldedChunkBatchSampler(self.dataset,batch_size,max_seq_length)
@@ -346,6 +346,10 @@ class PytorchKaldiDataLoader(DataLoader):
                            shuffle=False)
         elif mode=='forward':
             self.batch_sampler = PaddedBatchSampler(self.dataset,batch_size)
+        elif mode=='forward_spk_chunk':
+            self.batch_sampler = SpeakerChunkSampler(self.dataset,info_csv,batch_size)
+        elif mode=='forward_mtg_chunk':
+            self.batch_sampler = MeetingChunkSampler(self.dataset,info_csv,batch_size)
 
         super(PytorchKaldiDataLoader, self).__init__(
             dataset=self.dataset,batch_sampler=self.batch_sampler,collate_fn=self.collate_fn,

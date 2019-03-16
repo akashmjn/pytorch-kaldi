@@ -83,7 +83,7 @@ if [ $stage -le 1 ]; then
 # Remove some stuff we don't want to score, from the ctm.
 # - we remove hesitations here, otherwise the CTM would have a bug!
 #   (confidences in place of the removed hesitations),
-  for x in $dir/ascore_*/${name}.ctm; do
+  for x in $dir/ascore_*/${name}.ref; do
     cp $x $x.tmpf;
     cat $x.tmpf | grep -i -v -E '\[noise|laughter|vocalized-noise\]' | \
       grep -i -v -E ' (ACH|AH|EEE|EH|ER|EW|HA|HEE|HM|HMM|HUH|MM|OOF|UH|UM) ' | \

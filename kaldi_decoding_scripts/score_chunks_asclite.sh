@@ -36,7 +36,7 @@ hubscr=$KALDI_ROOT/tools/sctk/bin/hubscr.pl
 [ ! -f $hubscr ] && echo "Cannot find scoring program at $hubscr" && exit 1;
 hubdir=`dirname $hubscr`
 
-for f in $data/stm $data/glm $lang/words.txt $lang/phones/word_boundary.int \
+for f in $data/trn $data/glm $lang/words.txt $lang/phones/word_boundary.int \
      $model $data/segments $data/reco2file_and_channel $dir/lat.1.gz; do
   [ ! -f $f ] && echo "$0: expecting file $f to exist" && exit 1;
 done
@@ -60,7 +60,7 @@ if [ $stage -le 0 ]; then
   for LMWT in $(seq $min_lmwt $max_lmwt); do
     rm -f $dir/.error
     (
-    $cmd JOB=1:$nj $dir/ascoring/log/get_ref.${LMWT}.JOB.log \
+    $cmd JOB=1:$nj $dir/ascoring/log/get_trn.${LMWT}.JOB.log \
       mkdir -p $dir/ascore_${LMWT}/ '&&' \
       lattice-scale --inv-acoustic-scale=${LMWT} "ark:gunzip -c $dir/lat.JOB.gz|" ark:- \| \
       lattice-limit-depth ark:- ark:- \| \
@@ -68,22 +68,23 @@ if [ $stage -le 0 ]; then
       lattice-align-words-lexicon --max-expand=10.0 \
        $lang/phones/align_lexicon.int $model ark:- ark:- \| \
       lattice-best-path --word-symbol-table=$lang/words.txt ark:- ark,t:- \| \
-      utils/int2sym.pl -f 2- $lang/words.txt  \
-      '>' $dir/ascore_${LMWT}/${name}.JOB.ref || touch $dir/.error;
+      utils/int2sym.pl -f 2- $lang/words.txt \| \
+      awk '{for(i=2;i<=NF;++i){printf "%s ",$i}; printf "(%s)\n",$1 }' \
+      '>' $dir/ascore_${LMWT}/${name}.JOB.trn || touch $dir/.error;
     # Merge and clean,
-    for ((n=1; n<=nj; n++)); do cat $dir/ascore_${LMWT}/${name}.${n}.ref; done > $dir/ascore_${LMWT}/${name}.ref
-    rm -f $dir/ascore_${LMWT}/${name}.*.ref
+    for ((n=1; n<=nj; n++)); do cat $dir/ascore_${LMWT}/${name}.${n}.trn; done > $dir/ascore_${LMWT}/${name}.trn
+    rm -f $dir/ascore_${LMWT}/${name}.*.trn
     )&
   done
   wait;
-  [ -f $dir/.error ] && echo "$0: error during ref generation. check $dir/ascoring/log/get_ref.*.log" && exit 1;
+  [ -f $dir/.error ] && echo "$0: error during trn generation. check $dir/ascoring/log/get_trn.*.log" && exit 1;
 fi
 
 #if [ $stage -le 1 ]; then
 ## Remove some stuff we don't want to score, from the ctm.
 ## - we remove hesitations here, otherwise the CTM would have a bug!
 ##   (confidences in place of the removed hesitations),
-#  for x in $dir/ascore_*/${name}.ref; do
+#  for x in $dir/ascore_*/${name}.trn; do
 #    cp $x $x.tmpf;
 #    cat $x.tmpf | grep -i -v -E '\[noise|laughter|vocalized-noise\]' | \
 #      grep -i -v -E ' (ACH|AH|EEE|EH|ER|EW|HA|HEE|HM|HMM|HUH|MM|OOF|UH|UM) ' | \
@@ -110,10 +111,10 @@ if [ $stage -le 2 ]; then
     # -V .. skip validation of input transcripts,
     # -h rt-stt .. removes non-lexical items from CTM,
     $cmd LMWT=$min_lmwt:$max_lmwt $dir/ascoring/log/score.LMWT.log \
-      cp $data/stm $dir/ascore_LMWT/ '&&' \
-      cp $dir/ascore_LMWT/${name}.ctm $dir/ascore_LMWT/${oname}.ctm '&&' \
+      cp $data/trn $dir/ascore_LMWT/ '&&' \
+      cp $dir/ascore_LMWT/${name}.trn $dir/ascore_LMWT/${oname}.trn '&&' \
       $hubscr -G -v -m 1:2 -o$overlap_spk -a -C -B 8192 -p $hubdir -V -l english \
-        -h rt-stt -g $data/glm -r $dir/ascore_LMWT/stm $dir/ascore_LMWT/${oname}.ctm || exit 1
+        -h rt-stt -g $data/glm -r $dir/ascore_LMWT/trn $dir/ascore_LMWT/${oname}.trn || exit 1
     # Compress some scoring outputs : alignment info and graphs,
     echo -n "compressing asclite outputs "
     for LMWT in $(seq $min_lmwt $max_lmwt); do
@@ -128,7 +129,7 @@ if [ $stage -le 2 ]; then
   else
     $cmd LMWT=$min_lmwt:$max_lmwt $dir/ascoring/log/score.LMWT.log \
       cp $data/stm $dir/ascore_LMWT/ '&&' \
-      $hubscr -p $hubdir -v -V -l english -h hub5 -g $data/glm -r $dir/ascore_LMWT/stm $dir/ascore_LMWT/${name}.ctm || exit 1
+      $hubscr -p $hubdir -v -V -l english -h hub5 -g $data/glm -r $dir/ascore_LMWT/trn $dir/ascore_LMWT/${name}.ctm || exit 1
   fi
 fi
 

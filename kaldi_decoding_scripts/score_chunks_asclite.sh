@@ -60,14 +60,14 @@ if [ $stage -le 0 ]; then
   for LMWT in $(seq $min_lmwt $max_lmwt); do
     rm -f $dir/.error
     (
-    $cmd JOB=1:$nj $dir/ascoring/log/get_ctm.${LMWT}.JOB.log \
+    $cmd JOB=1:$nj $dir/ascoring/log/get_ref.${LMWT}.JOB.log \
       mkdir -p $dir/ascore_${LMWT}/ '&&' \
       lattice-scale --inv-acoustic-scale=${LMWT} "ark:gunzip -c $dir/lat.JOB.gz|" ark:- \| \
       lattice-limit-depth ark:- ark:- \| \
       lattice-push --push-strings=false ark:- ark:- \| \
       lattice-align-words-lexicon --max-expand=10.0 \
        $lang/phones/align_lexicon.int $model ark:- ark:- \| \
-      lattice-best-path --word-symbol-table $lang/words.txt ark:- ark,t:- \| \
+      lattice-best-path --word-symbol-table=$lang/words.txt ark:- ark,t:- \| \
       utils/int2sym.pl -f 5 $lang/words.txt  \| \
       '>' $dir/ascore_${LMWT}/${name}.JOB.ref || touch $dir/.error;
     # Merge and clean,

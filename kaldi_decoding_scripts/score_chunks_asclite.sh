@@ -68,7 +68,7 @@ if [ $stage -le 0 ]; then
       lattice-align-words-lexicon --max-expand=10.0 \
        $lang/phones/align_lexicon.int $model ark:- ark:- \| \
       lattice-best-path --word-symbol-table=$lang/words.txt ark:- ark,t:- \| \
-      utils/int2sym.pl -f 5 $lang/words.txt  \| \
+      utils/int2sym.pl -f 2- $lang/words.txt  \
       '>' $dir/ascore_${LMWT}/${name}.JOB.ref || touch $dir/.error;
     # Merge and clean,
     for ((n=1; n<=nj; n++)); do cat $dir/ascore_${LMWT}/${name}.${n}.ref; done > $dir/ascore_${LMWT}/${name}.ref
@@ -79,18 +79,18 @@ if [ $stage -le 0 ]; then
   [ -f $dir/.error ] && echo "$0: error during ref generation. check $dir/ascoring/log/get_ref.*.log" && exit 1;
 fi
 
-if [ $stage -le 1 ]; then
-# Remove some stuff we don't want to score, from the ctm.
-# - we remove hesitations here, otherwise the CTM would have a bug!
-#   (confidences in place of the removed hesitations),
-  for x in $dir/ascore_*/${name}.ref; do
-    cp $x $x.tmpf;
-    cat $x.tmpf | grep -i -v -E '\[noise|laughter|vocalized-noise\]' | \
-      grep -i -v -E ' (ACH|AH|EEE|EH|ER|EW|HA|HEE|HM|HMM|HUH|MM|OOF|UH|UM) ' | \
-      grep -i -v -E '<unk>' > $x;
-#      grep -i -v -E '<UNK>|%HESITATION' > $x;
-  done
-fi
+#if [ $stage -le 1 ]; then
+## Remove some stuff we don't want to score, from the ctm.
+## - we remove hesitations here, otherwise the CTM would have a bug!
+##   (confidences in place of the removed hesitations),
+#  for x in $dir/ascore_*/${name}.ref; do
+#    cp $x $x.tmpf;
+#    cat $x.tmpf | grep -i -v -E '\[noise|laughter|vocalized-noise\]' | \
+#      grep -i -v -E ' (ACH|AH|EEE|EH|ER|EW|HA|HEE|HM|HMM|HUH|MM|OOF|UH|UM) ' | \
+#      grep -i -v -E '<unk>' > $x;
+##      grep -i -v -E '<UNK>|%HESITATION' > $x;
+#  done
+#fi
 
 ## For each LMWT score the generated transcripts generated above 
 if [ $stage -le 2 ]; then

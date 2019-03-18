@@ -294,7 +294,7 @@ class SpeakerChunkSampler(sampler.Sampler):
             batch_info = self.spk_chunk_info.iloc[i*self.batch_size:(i+1)*self.batch_size]
             # some uid may not be present in utt2index (incomplete features). ignore those chunks
             batch_chunk_uids = [ chunk_uids for chunk_uids in batch_info.utt_ids.apply(list) 
-                                   if any(map(lambda x: x in self.dataset.utt2index, chunk_uids)) ] 
+                                   if all(map(lambda x: x in self.dataset.utt2index, chunk_uids)) ] 
             # For each uttid in spk_chunk_id, concat(utt2index[uttid])
             batch_idx_list = [
                 np.concatenate([
@@ -335,7 +335,7 @@ class MeetingChunkSampler(sampler.Sampler):
             batch_info = self.mtg_chunk_info.iloc[i*self.batch_size:(i+1)*self.batch_size]
             # some uid may not be present in utt2index (incomplete features). ignore those chunks
             batch_chunk_uids = [ chunk_uids for chunk_uids in batch_info.utt_ids.apply(list) 
-                                   if any(map(lambda x: x in self.dataset.utt2index, chunk_uids)) ] 
+                                   if all(map(lambda x: x in self.dataset.utt2index, chunk_uids)) ] 
             # For each uttid in mtg_chunk_id, concat(utt2index[uttid])
             batch_idx_list = [
                 np.concatenate([

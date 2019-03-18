@@ -292,13 +292,14 @@ class SpeakerChunkSampler(sampler.Sampler):
         for i in range(self.N_batches):
             # batch chunks has form [ [uttid,...] ]
             batch_info = self.spk_chunk_info.iloc[i*self.batch_size:(i+1)*self.batch_size]
-            batch_chunk_uids = batch_info.utt_ids.apply(list) 
+            # some uid may not be present in utt2index (incomplete features). ignore those chunks
+            batch_chunk_uids = [ chunk_uids for chunk_uids in batch_info.utt_ids.apply(list) 
+                                   if any(map(lambda x: x in self.dataset.utt2index, chunk_uids)) ] 
             # For each uttid in spk_chunk_id, concat(utt2index[uttid])
-            # TODO: uid may not be present in utt2index 
             batch_idx_list = [
-                np.concatenate([ np.array(range(*self.dataset.utt2index[uid])) 
-                                for uid in chunk_uids if uid in self.dataset.utt2index]) 
-                for chunk_uids in batch_chunk_uids
+                np.concatenate([
+                        np.array(range(*self.dataset.utt2index[uid])) for uid in chunk_uids
+                    ]) for chunk_uids in batch_chunk_uids
             ]
             self._last_batch_info = (list(batch_info.index),[i.shape[0] for i in batch_idx_list])
             yield batch_idx_list
@@ -332,13 +333,14 @@ class MeetingChunkSampler(sampler.Sampler):
         for i in range(self.N_batches):
             # batch chunks has form [ [uttid,...] ]
             batch_info = self.mtg_chunk_info.iloc[i*self.batch_size:(i+1)*self.batch_size]
-            batch_chunk_uids = batch_info.utt_ids.apply(list) 
+            # some uid may not be present in utt2index (incomplete features). ignore those chunks
+            batch_chunk_uids = [ chunk_uids for chunk_uids in batch_info.utt_ids.apply(list) 
+                                   if any(map(lambda x: x in self.dataset.utt2index, chunk_uids)) ] 
             # For each uttid in mtg_chunk_id, concat(utt2index[uttid])
-            # TODO: uid may not be present in utt2index 
             batch_idx_list = [
-                np.concatenate([ np.array(range(*self.dataset.utt2index[uid])) 
-                                for uid in chunk_uids if uid in self.dataset.utt2index]) 
-                for chunk_uids in batch_chunk_uids
+                np.concatenate([
+                        np.array(range(*self.dataset.utt2index[uid])) for uid in chunk_uids
+                    ]) for chunk_uids in batch_chunk_uids
             ]
             self._last_batch_info = (list(batch_info.index),[i.shape[0] for i in batch_idx_list])
             yield batch_idx_list 

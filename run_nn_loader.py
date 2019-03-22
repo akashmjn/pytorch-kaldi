@@ -83,9 +83,9 @@ if to_do=='valid':
 
 if to_do=='forward':
     max_seq_length=-1 # do to break forward sentences
-    batch_size=64
-    info_csv = "./kaldi_data_dir/data/ihm/eval_hires/info.csv"
-    dataloader = PytorchKaldiDataLoader(dataset,to_do+"_spk_chunk",batch_size,info_csv=info_csv)
+    batch_size=32
+    info_csv = "/tmp/pytorch-kaldi/kaldi_data_dir/data/ihm/eval_mtg_chunkW10_hires/info.csv"
+    dataloader = PytorchKaldiDataLoader(dataset,to_do+"_mtg_chunk",batch_size,info_csv=info_csv)
 
 elapsed_time_reading=time.time() - start_time 
 
@@ -115,8 +115,9 @@ for net in nns.keys():
   if pt_file_arch!='none':        
       checkpoint_load = torch.load(pt_file_arch)
       nns[net].load_state_dict(checkpoint_load['model_par'])
-      optimizers[net].load_state_dict(checkpoint_load['optimizer_par'])
-      optimizers[net].param_groups[0]['lr']=float(config[arch_dict[net][0]]['arch_lr']) # loading lr of the cfg file for pt
+      if to_do != 'forward':
+          optimizers[net].load_state_dict(checkpoint_load['optimizer_par'])
+          optimizers[net].param_groups[0]['lr']=float(config[arch_dict[net][0]]['arch_lr']) # loading lr of the cfg file for pt
 
 if to_do=='forward':
     

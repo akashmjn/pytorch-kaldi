@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import pandas as pd
 import os,sys
 import time, warnings
 import kaldi_io, pdb
@@ -86,6 +87,18 @@ def read_lab_fea_loader(fea_dict,lab_dict):
 
 class PytorchKaldiDataset(Dataset):
     """
+    Acts like a long array of frames (N,d) that can be indexed like a numpy array
+    e.g. dataset[idx] where idx can be an integer or an array. The frames are a 
+    concatentation of all utterances read from scp files in fea,lab dicts. 
+    d is the dimension of all features + 1 for each label. 
+
+    Internally maintains these data structures:
+    self.index: (N,k) int array (k is total num of features + labels) mapping index N
+                to corresponding location in internal array stored for each k 
+    self.index_names: (N,) str array containing name/uttid for each frame 
+    self.utt2index: OrderedDict mapping uttid to (start,end) location in N in self.index
+                self[self.utt2index[uid]] will yield the data 
+    self.features_dict, self.labels_dict: maps key_name: (internal_array, names, names2idx)
     """
 
     def __init__(self, fea_dict, lab_dict):
@@ -185,8 +198,16 @@ class PytorchKaldiDataset(Dataset):
 
 
 class FoldedChunkBatchSampler(sampler.Sampler):
-    # Determines order in which loader reads samples from dataset 
-    # Modify fea_dict w/ appropriate fea_indexes (probably do this in loader instead)
+    """
+    Yields iterator, each element = list[(seq_len,batch_size) int array] to access dataset. 
+    Dataset[batch] yields a (seq_len,batch_size,d) array. 
+    Returns list with one element as a hack as a list is required by DataLoader 
+
+    Internally maintains:
+    self.batch_indices: (nslices,batch_size) folded array of frame indexes 
+    into the dataset. nsclices=len(Dataset)//batch_size. Iterates by progressing along axis 0 
+    in steps of max_seq_length. 
+    """
     def __init__(self,dataset,batch_size,max_seq_length,shuffle=True):
         self.dataset = dataset
         self.dataset.set_index(shuffle=True) # Randomize order of utterances
@@ -194,8 +215,8 @@ class FoldedChunkBatchSampler(sampler.Sampler):
         self.max_seq_length = max_seq_length
         self.batch_dim = self.dataset.batch_dim
         # create array of indexes folded over by batch size  
-        nframes = len(self.dataset) - (len(self.dataset)%batch_size)
-        self.batch_indices = np.array(range(nframes))
+        nslices = len(self.dataset) - (len(self.dataset)%batch_size)
+        self.batch_indices = np.array(range(nslices))
         self.batch_indices = self.batch_indices.reshape(self.batch_size,-1)\
                                  .transpose((1,0))
         self.N_batches = int(self.batch_indices.shape[0]/self.max_seq_length)#ignores last batch 
@@ -208,7 +229,16 @@ class FoldedChunkBatchSampler(sampler.Sampler):
     def __len__(self):
         return self.N_batches
 
+
 class PaddedBatchSampler(sampler.Sampler):
+    """
+    Yields iterator of len batch_size, each element = list[(S_i,) int array] to access dataset. 
+    Each Dataset[elem] yields a (S_i,d) array. These are padded into a batch by the DataLoader.
+
+    Internally maintains:
+    self.utt_ids: list[ list[ uttid_i ] ] - each element is a list of uttids
+    contained in the batch. Uses dataset.utt2index to convert this to corresponding frame indexes.
+    """
     # iterate through utterances and create padded batches
     def __init__(self,dataset,batch_size):
         self.dataset = dataset
@@ -223,23 +253,117 @@ class PaddedBatchSampler(sampler.Sampler):
             list(dataset.utt2index.items()),key=lambda x: x[1][1]-x[1][0],reverse=True
             )) # sorting dataset.utt2index in decreasing length for efficient padding 
         self.utt_ids = [ utt_ids[i*batch_size:(i+1)*batch_size] for i in range(self.N_batches) ]
+        self._last_batch_info = None
 
     def __iter__(self):
         for i in range(self.N_batches):
-            yield [ np.array(range(*self.dataset.utt2index[uid]))
+            batch_idx_list = [ np.array(range(*self.dataset.utt2index[uid]))
                       for uid in self.utt_ids[i] 
                    ] 
+            self._last_batch_info = (self.utt_ids[i],[i.shape[0] for i in batch_idx_list])
+            yield batch_idx_list
+    
+    def __len__(self):
+        return self.N_batches
+    
+    def get_last_batch_info(self):
+        return self._last_batch_info
+
+
+class SpeakerChunkSampler(sampler.Sampler):
+    """
+    """
+    def __init__(self,dataset,info_csv,batch_size):
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self._info_df = pd.read_csv(info_csv).sort_values('mtg_utt_ids')
+        # Maintain spk_chunk_info = [ [uttid,...] ] 
+        s1 = self._info_df.groupby('spk_chunk_ids').utt_ids.apply(list)
+        s2 = self._info_df.groupby('spk_chunk_ids').sum().duration_s
+        # sort in decreasing order of length for padding efficiency
+        self.spk_chunk_info = pd.concat([s1,s2],axis=1).sort_values('duration_s',ascending=False)
+        N_chunks = len(self.spk_chunk_info)
+        # last batch may have < batch_size chunks 
+        self.N_batches = int(N_chunks/self.batch_size) \
+            if N_chunks%self.batch_size==0 else int(N_chunks/self.batch_size)+1
+        self._last_batch_info = None
+    
+    def __iter__(self):
+        for i in range(self.N_batches):
+            # batch chunks has form [ [uttid,...] ]
+            batch_info = self.spk_chunk_info.iloc[i*self.batch_size:(i+1)*self.batch_size]
+            batch_chunk_uids = batch_info.utt_ids.apply(list)
+            # some uid may not be present in utt2index (incomplete features). ignore those chunks
+            is_complete_chunk = [ all(map(lambda x: x in self.dataset.utt2index, chunk_uids))
+                                    for chunk_uids in batch_chunk_uids ]
+            batch_chunk_uids = [ x for (x,f) in zip(batch_chunk_uids,is_complete_chunk) if f ]
+            batch_info = batch_info[is_complete_chunk]
+            # For each uttid in spk_chunk_id, concat(utt2index[uttid])
+            batch_idx_list = [
+                np.concatenate([
+                        np.array(range(*self.dataset.utt2index[uid])) for uid in chunk_uids
+                    ]) for chunk_uids in batch_chunk_uids
+            ]
+            self._last_batch_info = (list(batch_info.index),[i.shape[0] for i in batch_idx_list])
+            yield batch_idx_list
     
     def __len__(self):
         return self.N_batches
 
+    def get_last_batch_info(self):
+        return self._last_batch_info
+
+
+class MeetingChunkSampler(sampler.Sampler):
+    """
+    """
+    def __init__(self,dataset,info_csv,batch_size):
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self._info_df = pd.read_csv(info_csv).sort_values('mtg_utt_ids')
+        # Maintain mtg_chunk_info = [ [uttid,...] ] 
+        s1 = self._info_df.groupby('mtg_chunk_ids').utt_ids.apply(list)
+        s2 = self._info_df.groupby('mtg_chunk_ids').sum().duration_s
+        # sort in decreasing order of length for padding efficiency
+        self.mtg_chunk_info = pd.concat([s1,s2],axis=1).sort_values('duration_s',ascending=False)
+        N_chunks = len(self.mtg_chunk_info)
+        # last batch may have < batch_size chunks 
+        self.N_batches = int(N_chunks/self.batch_size) \
+            if N_chunks%self.batch_size==0 else int(N_chunks/self.batch_size)+1
+        self._last_batch_info = None
+   
+    def __iter__(self):
+        for i in range(self.N_batches):
+            # batch chunks has form [ [uttid,...] ]
+            batch_info = self.mtg_chunk_info.iloc[i*self.batch_size:(i+1)*self.batch_size]
+            batch_chunk_uids = batch_info.utt_ids.apply(list)
+            # some uid may not be present in utt2index (incomplete features). ignore those chunks
+            is_complete_chunk = [ all(map(lambda x: x in self.dataset.utt2index, chunk_uids))
+                                    for chunk_uids in batch_chunk_uids ]
+            batch_chunk_uids = [ x for (x,f) in zip(batch_chunk_uids,is_complete_chunk) if f ]
+            batch_info = batch_info[is_complete_chunk]
+            # For each uttid in mtg_chunk_id, concat(utt2index[uttid])
+            batch_idx_list = [
+                np.concatenate([
+                        np.array(range(*self.dataset.utt2index[uid])) for uid in chunk_uids
+                    ]) for chunk_uids in batch_chunk_uids
+            ]
+            self._last_batch_info = (list(batch_info.index),[i.shape[0] for i in batch_idx_list])
+            yield batch_idx_list 
+    
+    def __len__(self):
+        return self.N_batches
+
+    def get_last_batch_info(self):
+        return self._last_batch_info
+
 
 class PytorchKaldiDataLoader(DataLoader):
 
-    def __init__(self,dataset,mode,batch_size,max_seq_length=None,num_workers=0):
+    def __init__(self,dataset,mode,batch_size,max_seq_length=None,info_csv=None,num_workers=0):
 
         self.dataset = dataset 
-        assert mode in ["train","valid","forward"], "Invalid mode passed!"
+        assert mode in ["train","valid","forward","forward_spk_chunk","forward_mtg_chunk"], "Invalid mode passed!"
         self.mode = mode
         if mode=='train':
             self.batch_sampler = FoldedChunkBatchSampler(self.dataset,batch_size,max_seq_length)
@@ -248,6 +372,10 @@ class PytorchKaldiDataLoader(DataLoader):
                            shuffle=False)
         elif mode=='forward':
             self.batch_sampler = PaddedBatchSampler(self.dataset,batch_size)
+        elif mode=='forward_spk_chunk':
+            self.batch_sampler = SpeakerChunkSampler(self.dataset,info_csv,batch_size)
+        elif mode=='forward_mtg_chunk':
+            self.batch_sampler = MeetingChunkSampler(self.dataset,info_csv,batch_size)
 
         super(PytorchKaldiDataLoader, self).__init__(
             dataset=self.dataset,batch_sampler=self.batch_sampler,collate_fn=self.collate_fn,
@@ -256,7 +384,7 @@ class PytorchKaldiDataLoader(DataLoader):
     
     def collate_fn(self,batch_list):
         # returns tensor compatible w/ forward_model 
-        if self.mode=='forward':
+        if 'forward' in self.mode:
             batch = pad_sequence(
                 [ torch.from_numpy(t).float() for t in batch_list ]
             ).contiguous()

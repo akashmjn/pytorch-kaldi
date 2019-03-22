@@ -49,11 +49,12 @@ if [ $# != 3 ]; then
 fi
 
 
-
 dir=`echo $out_folder | sed 's:/$::g'` # remove any trailing slash.
 featstring=$3
 srcdir=`dirname $dir`; # assume model directory one level up from decoding directory.
 sdata=$data/split$nj;
+
+if [ $stage -le 0 ]; then
 
 thread_string=
 [ $num_threads -gt 1 ] && thread_string="-parallel --num-threads=$num_threads"
@@ -73,7 +74,6 @@ for f in $graphdir/HCLG.fst $data/feats.scp; do
   [ ! -f $f ] && echo "$0: no such file $f" && exit 1;
 done
 
-
 JOB=1
 for ck_data in "${arr_ck[@]}"
 do
@@ -83,6 +83,8 @@ do
     JOB=$((JOB+1))
 done
 wait
+
+fi
 
 
 

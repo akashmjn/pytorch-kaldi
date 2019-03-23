@@ -1430,34 +1430,52 @@ def compute_cw_max(fea_dict):
 
 def model_init(inp_out_dict,model,config,arch_dict,use_cuda,multi_gpu,to_do):
     
-    pattern='(.*)=(.*)\((.*),(.*)\)'
+    pattern='(.*)=(.*)\((.*)\)'
      
     nns={}
     costs={}
        
     for line in model:
-        [out_name,operation,inp1,inp2]=list(re.findall(pattern,line)[0])
+        [out_name,operation,inputs_str]=list(re.findall(pattern,line)[0])
         
-        if operation=='compute':
+        if 'compute' in operation:
             
-            # computing input dim
-            inp_dim=inp_out_dict[inp2][-1]
-            
-            # import the class
-            module = importlib.import_module(config[arch_dict[inp1][0]]['arch_library'])
-            nn_class=getattr(module, config[arch_dict[inp1][0]]['arch_class'])
-            
-            # add use cuda and todo options
-            config.set(arch_dict[inp1][0],'use_cuda',config['exp']['use_cuda'])
-            config.set(arch_dict[inp1][0],'to_do',config['exp']['to_do'])
-            
-            arch_freeze_flag=strtobool(config[arch_dict[inp1][0]]['arch_freeze'])
+            if operation=='compute':
+                op_name, inp1 = inputs_str.split(',')[:2]
+                # computing input dim
+                inp_dim=inp_out_dict[inp1][-1]
 
-            
-            # initialize the neural network
-            net=nn_class(config[arch_dict[inp1][0]],inp_dim)
-    
-    
+                # import the class
+                module = importlib.import_module(config[arch_dict[op_name][0]]['arch_library'])
+                nn_class=getattr(module, config[arch_dict[op_name][0]]['arch_class'])
+
+                # add use cuda and todo options
+                config.set(arch_dict[op_name][0],'use_cuda',config['exp']['use_cuda'])
+                config.set(arch_dict[op_name][0],'to_do',config['exp']['to_do'])
+
+                arch_freeze_flag=strtobool(config[arch_dict[op_name][0]]['arch_freeze'])
+
+                # initialize the neural network
+                net=nn_class(config[arch_dict[op_name][0]],inp_dim)
+
+            elif operation=='compute2':
+                op_name, inp1, inp2 = inputs_str.split(',')[:3]
+                # computing input dim
+                inp1_dim=inp_out_dict[inp1][-1]
+                inp2_dim=inp_out_dict[inp2][-1]
+
+                # import the class
+                module = importlib.import_module(config[arch_dict[op_name][0]]['arch_library'])
+                nn_class=getattr(module, config[arch_dict[op_name][0]]['arch_class'])
+
+                # add use cuda and todo options
+                config.set(arch_dict[op_name][0],'use_cuda',config['exp']['use_cuda'])
+                config.set(arch_dict[op_name][0],'to_do',config['exp']['to_do'])
+
+                arch_freeze_flag=strtobool(config[arch_dict[op_name][0]]['arch_freeze'])
+
+                # initialize the neural network
+                net=nn_class(config[arch_dict[op_name][0]],inp1_dim,inp2_dim)
             
             if use_cuda:
                 net.cuda()
@@ -1476,7 +1494,7 @@ def model_init(inp_out_dict,model,config,arch_dict,use_cuda,multi_gpu,to_do):
     
             
             # addigng nn into the nns dict
-            nns[arch_dict[inp1][1]]=net
+            nns[arch_dict[op_name][1]]=net
             
             if multi_gpu:
                 out_dim=net.module.out_dim
@@ -1485,7 +1503,10 @@ def model_init(inp_out_dict,model,config,arch_dict,use_cuda,multi_gpu,to_do):
                 
             # updating output dim
             inp_out_dict[out_name]=[out_dim]
-            
+
+        else:            
+            inp1, inp2 = inputs_str.split(',')[:2]
+
         if operation=='concatenate':
             
             inp_dim1=inp_out_dict[inp1][-1]
@@ -1496,7 +1517,6 @@ def model_init(inp_out_dict,model,config,arch_dict,use_cuda,multi_gpu,to_do):
         if operation=='cost_nll':
             costs[out_name] = nn.NLLLoss()
             inp_out_dict[out_name]=[1]
-            
             
         if operation=='cost_err':
             inp_out_dict[out_name]=[1]
@@ -1569,12 +1589,35 @@ def optimizer_init(nns,config,arch_dict):
     return optimizers
 
 
+def fetch_input_tensor(inp_name,inp,outs_dict,inp_out_dict,is_sequential,max_len,batch_size): 
+    ## Get input tensors for the operation 
+    # if input feature, splice inp else lookup from already computed outs_dict
+    if len(inp_out_dict[inp_name])>1: # if it is an input feature
+        # Selection of the right feature in the inp tensor
+        if len(inp.shape)==3:
+            inp_tensor=inp[:,:,inp_out_dict[inp_name][-3]:inp_out_dict[inp_name][-2]]
+            if not is_sequential:
+                inp_tensor=inp_tensor.view(max_len*batch_size,-1)
+
+        if len(inp.shape)==2:
+            inp_tensor=inp[:,inp_out_dict[inp_name][-3]:inp_out_dict[inp_name][-2]]
+            if is_sequential:
+                inp_tensor=inp_tensor.view(max_len,batch_size,-1)
+    else:
+        if not(is_sequential) and len(outs_dict[inp_name].shape)==3:
+            outs_dict[inp_name]=outs_dict[inp_name].view(max_len*batch_size,-1)
+
+        if is_sequential and len(outs_dict[inp_name].shape)==2:
+            outs_dict[inp_name]=outs_dict[inp_name].view(max_len,batch_size,-1)
+        inp_tensor = outs_dict[inp_name]
+    return inp_tensor
+
 
 def forward_model(fea_dict,lab_dict,arch_dict,model,nns,costs,inp,inp_out_dict,max_len,batch_size,to_do,forward_outs):
     
     # Forward Step
     outs_dict={}
-    pattern='(.*)=(.*)\((.*),(.*)\)'
+    pattern='(.*)=(.*)\((.*)\)'
     
     # adding input features to out_dict:
     for fea in fea_dict.keys():
@@ -1584,42 +1627,32 @@ def forward_model(fea_dict,lab_dict,arch_dict,model,nns,costs,inp,inp_out_dict,m
         if len(inp.shape)==2 and len(fea_dict[fea])>1:
             outs_dict[fea]=inp[:,fea_dict[fea][5]:fea_dict[fea][6]]
 
-    
-    
+   
     for line in model:
-        [out_name,operation,inp1,inp2]=list(re.findall(pattern,line)[0])
+        [out_name,operation,inputs_str]=list(re.findall(pattern,line)[0])
 
-        if operation=='compute':
+        if 'compute' in operation:
             
-            if len(inp_out_dict[inp2])>1: # if it is an input feature
-                
-                # Selection of the right feature in the inp tensor
-                if len(inp.shape)==3:
-                    inp_dnn=inp[:,:,inp_out_dict[inp2][-3]:inp_out_dict[inp2][-2]]
-                    if not(bool(arch_dict[inp1][2])):
-                        inp_dnn=inp_dnn.view(max_len*batch_size,-1)
-                                 
-                if len(inp.shape)==2:
-                    inp_dnn=inp[:,inp_out_dict[inp2][-3]:inp_out_dict[inp2][-2]]
-                    if bool(arch_dict[inp1][2]):
-                        inp_dnn=inp_dnn.view(max_len,batch_size,-1)
-                    
-                outs_dict[out_name]=nns[inp1](inp_dnn)
+            ## Fetch input tensors for the operation 
+            ## Execute computation, add output to inp_out_dict 
+            if operation=='compute':
+                op_name, inp1 = inputs_str.split(',')[:2]
+                is_sequential = bool(arch_dict[op_name][2])
+                inp1_tensor = fetch_input_tensor(inp1,inp,outs_dict,inp_out_dict,is_sequential,max_len,batch_size)
+                outs_dict[out_name] = nns[op_name](inp1_tensor)
+            elif operation=='compute2':
+                op_name, inp1, inp2 = inputs_str.split(',')[:3]
+                is_sequential = bool(arch_dict[op_name][2])
+                inp1_tensor = fetch_input_tensor(inp1,inp,outs_dict,inp_out_dict,is_sequential,max_len,batch_size)
+                inp2_tensor = fetch_input_tensor(inp2,inp,outs_dict,inp_out_dict,is_sequential,max_len,batch_size)
+                outs_dict[out_name] = nns[op_name](inp1_tensor,inp2_tensor)
 
-                
-            else:
-                if not(bool(arch_dict[inp1][2])) and len(outs_dict[inp2].shape)==3:
-                    outs_dict[inp2]=outs_dict[inp2].view(max_len*batch_size,-1)
-                    
-                if bool(arch_dict[inp1][2]) and len(outs_dict[inp2].shape)==2:
-                    outs_dict[inp2]=outs_dict[inp2].view(max_len,batch_size,-1)
-                    
-                outs_dict[out_name]=nns[inp1](outs_dict[inp2])
-                
             if to_do=='forward' and out_name==forward_outs[-1]:
                 break
 
-        
+        else:
+            inp1, inp2 = inputs_str.split(',')[:2]
+       
         if operation=='cost_nll':
             
             # Put labels in the right format

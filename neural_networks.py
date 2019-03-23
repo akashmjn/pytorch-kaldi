@@ -393,11 +393,19 @@ class LSTM(nn.Module):
                  current_input=self.lstm_lay[i]
                  
         self.out_dim=self.lstm_lay[i]+self.bidir*self.lstm_lay[i]
+        self._set_init_states()
             
-             
-        
-    def forward(self, x):
-
+    def _set_init_states(self):         
+        # Initial state (layer_size)
+        self.h_inits = []
+        for i in range(self.N_lstm_lay):
+            if self.bidir:
+                h0 = torch.zeros(self.lstm_lay[i])
+            else:
+                h0 = torch.zeros(self.lstm_lay[i])
+            self.h_inits.append(h0)
+    
+    def _normalize_input(self,x):
         # Applying Layer/Batch Norm
         if bool(self.lstm_use_laynorm_inp):
             x=self.ln0((x))
@@ -405,29 +413,46 @@ class LSTM(nn.Module):
         if bool(self.lstm_use_batchnorm_inp):
             x_bn=self.bn0(x.view(x.shape[0]*x.shape[1],x.shape[2]))
             x=x_bn.view(x.shape[0],x.shape[1],x.shape[2])
+        return x
 
-          
+    def _layer_init(self,x,i):
+        # bidirectional concatenation (share fwd and bwd params)
+        if self.bidir:
+            x=torch.cat([x,flip(x,0)],1) # concat reverse inp on batch_dimension
+        # tiling h_init to (batch_size,dim)
+        h_init = self.h_inits[i].repeat((x.shape[1],1))
+        # Drop mask initilization (same mask for all time steps)            
+        if self.test_flag==False:
+            drop_mask=torch.bernoulli(torch.Tensor(h_init.shape[0],h_init.shape[1]).fill_(1-self.lstm_drop[i]))
+        else:
+            drop_mask=torch.FloatTensor([1-self.lstm_drop[i]])
+        if self.use_cuda:
+            h_init=h_init.cuda()
+            drop_mask=drop_mask.cuda()
+        return x, h_init, drop_mask
+        
+    def _apply_batchnorm(self,wfx_out,wix_out,wox_out,wcx_out):
+        wfx_out_bn=self.bn_wfx[i](wfx_out.view(wfx_out.shape[0]*wfx_out.shape[1],wfx_out.shape[2]))
+        wfx_out=wfx_out_bn.view(wfx_out.shape[0],wfx_out.shape[1],wfx_out.shape[2])
+    
+        wix_out_bn=self.bn_wix[i](wix_out.view(wix_out.shape[0]*wix_out.shape[1],wix_out.shape[2]))
+        wix_out=wix_out_bn.view(wix_out.shape[0],wix_out.shape[1],wix_out.shape[2])
+
+        wox_out_bn=self.bn_wox[i](wox_out.view(wox_out.shape[0]*wox_out.shape[1],wox_out.shape[2]))
+        wox_out=wox_out_bn.view(wox_out.shape[0],wox_out.shape[1],wox_out.shape[2])
+
+        wcx_out_bn=self.bn_wcx[i](wcx_out.view(wcx_out.shape[0]*wcx_out.shape[1],wcx_out.shape[2]))
+        wcx_out=wcx_out_bn.view(wcx_out.shape[0],wcx_out.shape[1],wcx_out.shape[2]) 
+
+        return wfx_out, wix_out, wox_out, wcx_out
+
+    def forward(self, x):
+
+        x = self._normalize_input(x)
         for i in range(self.N_lstm_lay):
             
-            # Initial state and concatenation
-            if self.bidir:
-                h_init = torch.zeros(2*x.shape[1], self.lstm_lay[i])
-                x=torch.cat([x,flip(x,0)],1)
-            else:
-                h_init = torch.zeros(x.shape[1],self.lstm_lay[i])
-        
-               
-            # Drop mask initilization (same mask for all time steps)            
-            if self.test_flag==False:
-                drop_mask=torch.bernoulli(torch.Tensor(h_init.shape[0],h_init.shape[1]).fill_(1-self.lstm_drop[i]))
-            else:
-                drop_mask=torch.FloatTensor([1-self.lstm_drop[i]])
-                
-            if self.use_cuda:
-               h_init=h_init.cuda()
-               drop_mask=drop_mask.cuda()
-               
-                 
+            x, h_init, drop_mask = self._layer_init(x,i)                 
+
             # Feed-forward affine transformations (all steps in parallel)
             wfx_out=self.wfx[i](x)
             wix_out=self.wix[i](x)
@@ -436,20 +461,8 @@ class LSTM(nn.Module):
             
             # Apply batch norm if needed (all steos in parallel)
             if self.lstm_use_batchnorm[i]:
+                wfx_out, wix_out, wox_out, wcx_out = self._apply_batchnorm(wfx_out,wix_out,wox_out,wcx_out)
 
-                wfx_out_bn=self.bn_wfx[i](wfx_out.view(wfx_out.shape[0]*wfx_out.shape[1],wfx_out.shape[2]))
-                wfx_out=wfx_out_bn.view(wfx_out.shape[0],wfx_out.shape[1],wfx_out.shape[2])
-         
-                wix_out_bn=self.bn_wix[i](wix_out.view(wix_out.shape[0]*wix_out.shape[1],wix_out.shape[2]))
-                wix_out=wix_out_bn.view(wix_out.shape[0],wix_out.shape[1],wix_out.shape[2])
-   
-                wox_out_bn=self.bn_wox[i](wox_out.view(wox_out.shape[0]*wox_out.shape[1],wox_out.shape[2]))
-                wox_out=wox_out_bn.view(wox_out.shape[0],wox_out.shape[1],wox_out.shape[2])
-
-                wcx_out_bn=self.bn_wcx[i](wcx_out.view(wcx_out.shape[0]*wcx_out.shape[1],wcx_out.shape[2]))
-                wcx_out=wcx_out_bn.view(wcx_out.shape[0],wcx_out.shape[1],wcx_out.shape[2]) 
-            
-            
             # Processing time steps
             hiddens = []
             ct=h_init
@@ -462,6 +475,7 @@ class LSTM(nn.Module):
                 it=torch.sigmoid(wix_out[k]+self.uih[i](ht))
                 ot=torch.sigmoid(wox_out[k]+self.uoh[i](ht))
                 ct=it*self.act[i](wcx_out[k]+self.uch[i](ht))*drop_mask+ft*ct
+                # ct=ct+Wi(s)
                 ht=ot*self.act[i](ct)
                 
                 if self.lstm_use_laynorm[i]:
@@ -480,10 +494,77 @@ class LSTM(nn.Module):
                 
             # Setup x for the next hidden layer
             x=h
-
               
         return x
+
+
+class LSTM_membiased(LSTM):
+
+    def __init__(self,options,inp_dim,bias_inp_dim):
+        super(LSTM_membiased,self).__init__(options,inp_dim)
+        self.bias_inp_dim = bias_inp_dim
+        # Add linear projections wcs per layer
+        self.wcs = nn.ModuleList([ 
+                nn.Linear(self.bias_inp_dim,self.lstm_lay[i],bias=False)
+                for i in range(self.N_lstm_lay)
+            ])
     
+    def forward(self,x,bias_inp):
+
+        x = self._normalize_input(x)
+        if self.bidir:
+            bias_inp=torch.cat([bias_inp,flip(bias_inp,0)],1) # flip onto batch_dim
+
+        for i in range(self.N_lstm_lay):
+            
+            x, h_init, drop_mask = self._layer_init(x,i)                 
+
+            # Feed-forward affine transformations (all steps in parallel)
+            wfx_out=self.wfx[i](x)
+            wix_out=self.wix[i](x)
+            wox_out=self.wox[i](x)
+            wcx_out=self.wcx[i](x)
+            wcs_out=self.wcs[i](bias_inp) # (seq,batch_size,dim)
+            
+            # Apply batch norm if needed (all steos in parallel)
+            if self.lstm_use_batchnorm[i]:
+                wfx_out, wix_out, wox_out, wcx_out = self._apply_batchnorm(wfx_out,wix_out,wox_out,wcx_out)
+
+            # Processing time steps
+            hiddens = []
+            ct=h_init
+            ht=h_init
+            
+            for k in range(x.shape[0]):
+                
+                # LSTM equations
+                ft=torch.sigmoid(wfx_out[k]+self.ufh[i](ht))
+                it=torch.sigmoid(wix_out[k]+self.uih[i](ht))
+                ot=torch.sigmoid(wox_out[k]+self.uoh[i](ht))
+                ct=it*self.act[i](wcx_out[k]+self.uch[i](ht))*drop_mask+ft*ct
+                ct=ct+wcs_out[k] # Adding bias to LSTM memory
+                ht=ot*self.act[i](ct)
+                
+                if self.lstm_use_laynorm[i]:
+                    ht=self.ln[i](ht)
+                    
+                hiddens.append(ht)
+                
+            # Stacking hidden states
+            h=torch.stack(hiddens)
+            
+            # Bidirectional concatenations
+            if self.bidir:
+                h_f=h[:,0:int(x.shape[1]/2)]
+                h_b=flip(h[:,int(x.shape[1]/2):x.shape[1]].contiguous(),0)
+                h=torch.cat([h_f,h_b],2)
+                
+            # Setup x for the next hidden layer
+            x=h
+              
+        return x
+
+
 class GRU(nn.Module):
     
     def __init__(self, options,inp_dim):

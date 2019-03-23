@@ -10,7 +10,7 @@ import configparser
 import numpy as np
 import torch
 from dataloader import read_lab_fea_loader, PytorchKaldiDataset, FoldedChunkBatchSampler, PaddedBatchSampler, PytorchKaldiDataLoader
-from neural_networks import AffineTransformDeep
+from neural_networks import AffineTransformDeep, LSTM, LSTM_membiased 
 from utils import dict_fea_lab_arch
 
 def test_dataloader():
@@ -31,6 +31,27 @@ def test_dataloader():
     return dataloader_train, dataloader_valid, dataloader_eval
 
 dl_train, dl_valid, dl_eval = test_dataloader()
-options = {'fea_dim':3,'dnn_act':'linear'}
+options = {'fea_dim':3,'act':'linear'}
 A1 = AffineTransformDeep(options,5)
 x = torch.randn(4,5)
+
+options = {
+    'lstm_lay':"512,512,512",
+    'lstm_drop':"0.2,0.2,0.2",
+    'lstm_use_batchnorm':"False,False,False",
+    'lstm_use_laynorm':"False,False,False",
+    'lstm_use_batchnorm_inp':"False",
+    'lstm_use_laynorm_inp':"False",
+    'lstm_act':"tanh,tanh,tanh",
+    'lstm_orthinit':"True",
+    'lstm_bidir':"True",
+    'use_cuda':"False",
+    'to_do':"train"
+    }
+
+L1 = LSTM(options,40)
+L2 = LSTM_membiased(options,40,512)
+
+inp = next(iter(dl_train))
+s = inp[:,:,:512]
+x = inp[:,:,512:552]

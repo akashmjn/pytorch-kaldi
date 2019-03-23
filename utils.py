@@ -1318,59 +1318,42 @@ def dict_fea_lab_arch(config):
     fea_field=config['data_chunk']['fea']
     lab_field=config['data_chunk']['lab']
     
-    pattern='(.*)=(.*)\((.*),(.*)\)'
+    pattern='(.*)=(.*)\((.*)\)'
+
+    def check_update_fea_lab_lst(inp_name):
+
+        if inp_name in fea_lst and inp_name not in fea_lst_used_name :
+            pattern_fea="fea_name="+inp_name+"\nfea_lst=(.*)\nfea_opts=(.*)\ncw_left=(.*)\ncw_right=(.*)\nfea_dim=(.*)"
+            if sys.version_info[0]==2:
+                fea_lst_used.append((inp_name+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).encode('utf8').split(','))
+                fea_dict_used[inp_name]=(inp_name+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).encode('utf8').split(',')
+            else:
+                fea_lst_used.append((inp_name+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).split(','))
+                fea_dict_used[inp_name]=(inp_name+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).split(',')
+            
+            fea_lst_used_name.append(inp_name)
+
+        if inp_name in lab_lst and inp_name not in lab_lst_used_name:
+            pattern_lab="lab_name="+inp_name+"\nlab_folder=(.*)\nlab_opts=(.*)"
+            
+            if sys.version_info[0]==2:
+                lab_lst_used.append((inp_name+","+",".join(list(re.findall(pattern_lab,lab_field)[0]))).encode('utf8').split(','))
+                lab_dict_used[inp_name]=(inp_name+","+",".join(list(re.findall(pattern_lab,lab_field)[0]))).encode('utf8').split(',')
+            else:
+                lab_lst_used.append((inp_name+","+",".join(list(re.findall(pattern_lab,lab_field)[0]))).split(','))
+                lab_dict_used[inp_name]=(inp_name+","+",".join(list(re.findall(pattern_lab,lab_field)[0]))).split(',')
+            
+            lab_lst_used_name.append(inp_name)
     
     for line in model:
-        [out_name,operation,inp1,inp2]=list(re.findall(pattern,line)[0])
-        
-        if inp1 in fea_lst and inp1 not in fea_lst_used_name :
-            pattern_fea="fea_name="+inp1+"\nfea_lst=(.*)\nfea_opts=(.*)\ncw_left=(.*)\ncw_right=(.*)\nfea_dim=(.*)"
-            if sys.version_info[0]==2:
-                fea_lst_used.append((inp1+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).encode('utf8').split(','))
-                fea_dict_used[inp1]=(inp1+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).encode('utf8').split(',')
-            else:
-                fea_lst_used.append((inp1+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).split(','))
-                fea_dict_used[inp1]=(inp1+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).split(',')
+        [out_name,operation,inputs_str]=list(re.findall(pattern,line)[0])
+        if len(inputs_str.split(','))==2: inp1, inp2, inp3 = inputs_str.split(',')+[None]
+        elif len(inputs_str.split(','))==3: inp1, inp2, inp3 = inputs_str.split(',')
+
+        for inp_name in [inp1,inp2,inp3]:
+            check_update_fea_lab_lst(inp_name)
             
-            fea_lst_used_name.append(inp1)
-            
-            
-        if inp2 in fea_lst and inp2 not in fea_lst_used_name:
-            pattern_fea="fea_name="+inp2+"\nfea_lst=(.*)\nfea_opts=(.*)\ncw_left=(.*)\ncw_right=(.*)\nfea_dim=(.*)"
-            if sys.version_info[0]==2:
-                fea_lst_used.append((inp2+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).encode('utf8').split(','))
-                fea_dict_used[inp2]=(inp2+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).encode('utf8').split(',')
-            else:
-                fea_lst_used.append((inp2+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).split(','))
-                fea_dict_used[inp2]=(inp2+","+",".join(list(re.findall(pattern_fea,fea_field)[0]))).split(',')
-                
-            
-            fea_lst_used_name.append(inp2)
-        if inp1 in lab_lst and inp1 not in lab_lst_used_name:
-            pattern_lab="lab_name="+inp1+"\nlab_folder=(.*)\nlab_opts=(.*)"
-            
-            if sys.version_info[0]==2:
-                lab_lst_used.append((inp1+","+",".join(list(re.findall(pattern_lab,lab_field)[0]))).encode('utf8').split(','))
-                lab_dict_used[inp1]=(inp1+","+",".join(list(re.findall(pattern_lab,lab_field)[0]))).encode('utf8').split(',')
-            else:
-                lab_lst_used.append((inp1+","+",".join(list(re.findall(pattern_lab,lab_field)[0]))).split(','))
-                lab_dict_used[inp1]=(inp1+","+",".join(list(re.findall(pattern_lab,lab_field)[0]))).split(',')
-            
-            lab_lst_used_name.append(inp1)
-            
-        if inp2 in lab_lst and inp2 not in lab_lst_used_name:
-            pattern_lab="lab_name="+inp2+"\nlab_folder=(.*)\nlab_opts=(.*)"
-            
-            if sys.version_info[0]==2:
-                lab_lst_used.append((inp2+","+",".join(list(re.findall(pattern_lab,lab_field)[0]))).encode('utf8').split(','))
-                lab_dict_used[inp2]=(inp2+","+",".join(list(re.findall(pattern_lab,lab_field)[0]))).encode('utf8').split(',')
-            else:
-                lab_lst_used.append((inp2+","+",".join(list(re.findall(pattern_lab,lab_field)[0]))).split(','))
-                lab_dict_used[inp2]=(inp2+","+",".join(list(re.findall(pattern_lab,lab_field)[0]))).split(',')              
-            
-            lab_lst_used_name.append(inp2)
-            
-        if operation=='compute' and inp1 not in arch_lst_used_name:
+        if 'compute' in operation and inp1 not in arch_lst_used_name:
             arch_id=cfg_item2sec(config,'arch_name',inp1)
             arch_seq_model=strtobool(config[arch_id]['arch_seq_model'])
             arch_lst_used.append([arch_id,inp1,arch_seq_model])

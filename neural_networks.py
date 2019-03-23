@@ -28,6 +28,9 @@ class LayerNorm(nn.Module):
         std = x.std(-1, keepdim=True)
         return self.gamma * (x - mean) / (std + self.eps) + self.beta
 
+class LayerNormBlock(LayerNorm):
+    def __init__(self, options, inp_dim):
+        super(LayerNormBlock,self).__init__(inp_dim)
 
 def act_fun(act_type):
 

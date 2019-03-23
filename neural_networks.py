@@ -31,6 +31,7 @@ class LayerNorm(nn.Module):
 class LayerNormBlock(LayerNorm):
     def __init__(self, options, inp_dim):
         super(LayerNormBlock,self).__init__(inp_dim)
+        self.out_dim = inp_dim
 
 def act_fun(act_type):
 

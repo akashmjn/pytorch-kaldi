@@ -153,9 +153,9 @@ for i, inp in enumerate(dataloader):
         # Gradient Clipping (th 0.5)
         grad_max_norm, grad_med_norm, grad_clip_norm = 0.0, np.inf, 0.5
         for net in nns.keys():
-            grad_norms = torch.stack(
-                        [p.grad.data.norm(2) for p in nns[net].parameters() if p.grad is not None]
-                      )
+            grad_norms = [p.grad.data.norm(2) for p in nns[net].parameters() if p.grad is not None]
+            if all(map(lambda x: x is None,grad_norms)): continue # some nets might not have gradients in this pass
+            grad_norms = torch.stack(grad_norms)
             grad_max_norm = max(torch.max(grad_norms).item(),grad_max_norm)
             grad_med_norm = min(torch.median(grad_norms).item(),grad_med_norm)
             torch.nn.utils.clip_grad_norm_(nns[net].parameters(), grad_clip_norm)

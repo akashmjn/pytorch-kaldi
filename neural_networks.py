@@ -568,6 +568,71 @@ class LSTM_membiased(LSTM):
               
         return x
 
+class LSTM_memgated(LSTM):
+
+    def __init__(self,options,inp_dim,bias_inp_dim):
+        super(LSTM_memgated,self).__init__(options,inp_dim)
+        self.bias_inp_dim = bias_inp_dim
+        # Add linear projections wcs per layer
+        self.wcs = nn.ModuleList([ 
+                nn.Linear(self.bias_inp_dim,self.lstm_lay[i],bias=False)
+                for i in range(self.N_lstm_lay)
+            ])
+    
+    def forward(self,x,bias_inp):
+
+        x = self._normalize_input(x)
+        if self.bidir:
+            bias_inp=torch.cat([bias_inp,flip(bias_inp,0)],1) # flip onto batch_dim
+
+        for i in range(self.N_lstm_lay):
+            
+            x, h_init, drop_mask = self._layer_init(x,i)                 
+
+            # Feed-forward affine transformations (all steps in parallel)
+            wfx_out=self.wfx[i](x)
+            wix_out=self.wix[i](x)
+            wox_out=self.wox[i](x)
+            wcx_out=self.wcx[i](x)
+            wcs_out=self.wcs[i](bias_inp) # (seq,batch_size,dim)
+            
+            # Apply batch norm if needed (all steos in parallel)
+            if self.lstm_use_batchnorm[i]:
+                wfx_out, wix_out, wox_out, wcx_out = self._apply_batchnorm(wfx_out,wix_out,wox_out,wcx_out)
+
+            # Processing time steps
+            hiddens = []
+            ct=h_init
+            ht=h_init
+            
+            for k in range(x.shape[0]):
+                
+                # LSTM equations
+                ft=torch.sigmoid(wfx_out[k]+self.ufh[i](ht))
+                it=torch.sigmoid(wix_out[k]+self.uih[i](ht))
+                ot=torch.sigmoid(wox_out[k]+self.uoh[i](ht))
+                ct=it*self.act[i](wcx_out[k]+self.uch[i](ht))*drop_mask+ft*ct
+                ct=ct*torch.sigmoid(wcs_out[k]) # Modulate LSTM memory with gate
+                ht=ot*self.act[i](ct)
+                
+                if self.lstm_use_laynorm[i]:
+                    ht=self.ln[i](ht)
+                    
+                hiddens.append(ht)
+                
+            # Stacking hidden states
+            h=torch.stack(hiddens)
+            
+            # Bidirectional concatenations
+            if self.bidir:
+                h_f=h[:,0:int(x.shape[1]/2)]
+                h_b=flip(h[:,int(x.shape[1]/2):x.shape[1]].contiguous(),0)
+                h=torch.cat([h_f,h_b],2)
+                
+            # Setup x for the next hidden layer
+            x=h
+              
+        return x
 
 class GRU(nn.Module):
     

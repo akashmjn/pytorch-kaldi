@@ -113,10 +113,12 @@ for net in nns.keys():
   
   if pt_file_arch!='none':        
       checkpoint_load = torch.load(pt_file_arch)
-      nns[net].load_state_dict(checkpoint_load['model_par'])
-      if 'train' in pt_file_arch: # TODO: HACK
+      nns[net].load_state_dict(checkpoint_load['model_par'],strict=False)
+      print("Loaded model state checkpoint")
+      if 'train' in pt_file_arch and to_do=='train': # TODO: HACK
           optimizers[net].load_state_dict(checkpoint_load['optimizer_par'])
           optimizers[net].param_groups[0]['lr']=float(config[arch_dict[net][0]]['arch_lr']) # loading lr of the cfg file for pt
+          print("Loaded optimizer state checkpoint")
 
 if to_do=='forward':
     

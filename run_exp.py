@@ -30,6 +30,9 @@ else:
     config = configparser.ConfigParser()
     config.read(cfg_file)
 
+# Setting CUDA_VISIBLE_DEVICES
+if config.has_option('exp','cuda_devices'):
+    os.environ['CUDA_VISIBLE_DEVICES']=config['exp']['cuda_devices']
 
 # Output folder creation
 out_folder=config['exp']['out_folder']

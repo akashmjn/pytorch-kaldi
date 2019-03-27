@@ -1,5 +1,6 @@
 [proto]
 compute(architecture,input)
+compute2(architecture,input1,input2)
 concatenate(input,input)
 cost_nll(input,label)
 cost_err(input,label)

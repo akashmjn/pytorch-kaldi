@@ -33,6 +33,31 @@ class LayerNormBlock(LayerNorm):
         super(LayerNormBlock,self).__init__(inp_dim)
         self.out_dim = inp_dim
 
+"""
+class EmbedInputBlock(LayerNorm):
+    def __init__(self, options, inp_dim):
+        super(EmbedInputBlock,self).__init__(inp_dim)
+        self.out_dim = inp_dim
+        self.use_cuda = strtobool(options['use_cuda'])
+        if options['to_do']=='train':
+            self.test_flag=False
+        else:
+            self.test_flag=True
+        if 'dnn_drop' in options:
+            self.drop = float(options['dnn_drop'])
+        else:
+            self.drop = 0.0
+
+    def forward(self,x):
+        mean = x.mean(-1, keepdim=True)
+        std = x.std(-1, keepdim=True)
+        result = self.gamma * (x - mean) / (std + self.eps) + self.beta
+        # make output (inf) w/ prob. self.drop
+        if torch.bernoulli(torch.ones(1)*self.drop) > 0:
+            result = torch.abs(torch.ones_like(x)*1e10*result) # inf, effectively setting gate to all ones
+        return result
+"""
+
 def act_fun(act_type):
 
  if act_type=="relu":
@@ -573,6 +598,8 @@ class LSTM_memgated(LSTM):
     def __init__(self,options,inp_dim,bias_inp_dim):
         super(LSTM_memgated,self).__init__(options,inp_dim)
         self.bias_inp_dim = bias_inp_dim
+        if 'embed_drop' in options: self.embed_drop = float(options['embed_drop'])
+        else: self.embed_drop = 0.0
         # Add linear projections wcs per layer
         self.wcs = nn.ModuleList([ 
                 nn.Linear(self.bias_inp_dim,self.lstm_lay[i],bias=False)
@@ -604,6 +631,14 @@ class LSTM_memgated(LSTM):
             hiddens = []
             ct=h_init
             ht=h_init
+
+            # for x (seq,batch,dim), rand sample along batch dimension. leave mem unchanged with P(self.embed_drop)
+            batch_size = bias_inp.shape[1]
+            if not self.test_flag:
+                embed_drop_mask = torch.bernoulli(torch.ones((batch_size,1))*self.embed_drop).repeat((1,self.bias_inp_dim)) # (batch_size,dim)
+            else:
+                embed_drop_mask = torch.zeros(batch_size,self.bias_inp_dim)
+            if self.use_cuda: embed_drop_mask = embed_drop_mask.cuda()
             
             for k in range(x.shape[0]):
                 
@@ -612,7 +647,8 @@ class LSTM_memgated(LSTM):
                 it=torch.sigmoid(wix_out[k]+self.uih[i](ht))
                 ot=torch.sigmoid(wox_out[k]+self.uoh[i](ht))
                 ct=it*self.act[i](wcx_out[k]+self.uch[i](ht))*drop_mask+ft*ct
-                ct=ct*torch.sigmoid(wcs_out[k]) # Modulate LSTM memory with gate
+                # Modulate LSTM memory with gate. mask ignores elemts of batch w/ value 1
+                ct=ct*torch.max(torch.sigmoid(wcs_out[k]),embed_drop_mask)
                 ht=ot*self.act[i](ct)
                 
                 if self.lstm_use_laynorm[i]:

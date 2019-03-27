@@ -239,5 +239,7 @@ with open(info_file, "w") as text_file:
     text_file.write("elapsed_time_load=%f (loading data on pytorch/gpu)\n" % elapsed_time_load)
     text_file.write("elapsed_time_chunk=%f (processing chunk)\n" % elapsed_time_chunk)
     text_file.write("elapsed_time=%f\n" % (elapsed_time_chunk+elapsed_time_load+elapsed_time_reading))
+    if to_do == 'train':
+        text_file.write("lr=%f (learning rate)\n" % float(config[list(arch_dict.values())[0][0]]['arch_lr']))
 text_file.close()
 
